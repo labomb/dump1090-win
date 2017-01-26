@@ -133,6 +133,9 @@ struct client *createGenericClient(struct net_service *service, int fd)
 {
     struct client *c;
 
+#ifdef _WIN32
+    if (Modes.isSocket)  // faup1090 uses stdout, can't do non-blocking
+#endif
     anetNonBlock(Modes.aneterr, fd);
 
     if (!(c = (struct client *) malloc(sizeof(*c)))) {
@@ -241,10 +244,21 @@ struct net_service *makeFatsvOutputService(void)
 
 void modesInitNet(void) {
     struct net_service *s;
-
+#ifndef _WIN32
     signal(SIGPIPE, SIG_IGN);
+#endif
     Modes.clients = NULL;
     Modes.services = NULL;
+
+#ifdef _WIN32
+    if ((!Modes.wsaData.wVersion)
+        && (!Modes.wsaData.wHighVersion)) {
+        // Try to start the windows socket support
+        if (WSAStartup(MAKEWORD(2, 1), &Modes.wsaData) != 0) {
+            fprintf(stderr, "WSAStartup returned Error\n");
+        }
+    }
+#endif
 
     // set up listeners
     s = serviceInit("Raw TCP output", &Modes.raw_out, send_raw_heartbeat, NULL, NULL);
@@ -304,7 +318,12 @@ static void modesCloseClient(struct client *c) {
     // client (unpredictably: reading from client A may cause client B to
     // be freed)
 
+#ifndef _WIN32
     close(c->fd);
+#else
+    if (Modes.isSocket)
+        closesocket((SOCKET)c->fd);
+#endif
     c->service->connections--;
 
     // mark it as inactive and ready to be freed
@@ -318,15 +337,19 @@ static void modesCloseClient(struct client *c) {
 //
 static void flushWrites(struct net_writer *writer) {
     struct client *c;
+    int nwritten;
 
     for (c = Modes.clients; c; c = c->next) {
         if (!c->service)
             continue;
         if (c->service == writer->service) {
 #ifndef _WIN32
-            int nwritten = write(c->fd, writer->data, writer->dataUsed);
+            nwritten = write(c->fd, writer->data, writer->dataUsed);
 #else
-            int nwritten = send(c->fd, writer->data, writer->dataUsed, 0 );
+            if (Modes.isSocket)
+                nwritten = send(c->fd, writer->data, writer->dataUsed, 0 );
+            else   // faup1090 uses stdout
+                nwritten = write(c->fd, writer->data, writer->dataUsed);
 #endif
             if (nwritten != writer->dataUsed) {
                 modesCloseClient(c);
@@ -355,14 +378,18 @@ static void *prepareWrite(struct net_writer *writer, int len) {
         flushWrites(writer);
     }
 
-    return writer->data + writer->dataUsed;
+    return (char *)writer->data + writer->dataUsed;
 }
 
 // Complete a write previously begun by prepareWrite.
 // endptr should point one byte past the last byte written
 // to the buffer returned from prepareWrite.
 static void completeWrite(struct net_writer *writer, void *endptr) {
+#ifndef _WIN32
     writer->dataUsed = endptr - writer->data;
+#else
+    writer->dataUsed = (char *)endptr - (char *)writer->data;
+#endif
 
     if (writer->dataUsed >= Modes.net_output_flush_size) {
         flushWrites(writer);
@@ -396,20 +423,20 @@ static void modesSendBeastOutput(struct modesMessage *mm) {
       {return;}
 
     /* timestamp, big-endian */
-    *p++ = (ch = (mm->timestampMsg >> 40));
+    *p++ = (ch = (char)(mm->timestampMsg >> 40));
     if (0x1A == ch) {*p++ = ch; }
-    *p++ = (ch = (mm->timestampMsg >> 32));
+    *p++ = (ch = (char)(mm->timestampMsg >> 32));
     if (0x1A == ch) {*p++ = ch; }
-    *p++ = (ch = (mm->timestampMsg >> 24));
+    *p++ = (ch = (char)(mm->timestampMsg >> 24));
     if (0x1A == ch) {*p++ = ch; }
-    *p++ = (ch = (mm->timestampMsg >> 16));
+    *p++ = (ch = (char)(mm->timestampMsg >> 16));
     if (0x1A == ch) {*p++ = ch; }
-    *p++ = (ch = (mm->timestampMsg >> 8));
+    *p++ = (ch = (char)(mm->timestampMsg >> 8));
     if (0x1A == ch) {*p++ = ch; }
-    *p++ = (ch = (mm->timestampMsg));
+    *p++ = (ch = (char)(mm->timestampMsg));
     if (0x1A == ch) {*p++ = ch; }
 
-    sig = round(sqrt(mm->signalLevel) * 255);
+    sig = (int)(round(sqrt(mm->signalLevel) * 255));
     if (mm->signalLevel > 0 && sig < 1)
         sig = 1;
     if (sig > 255)
@@ -1176,7 +1203,9 @@ static char * appendStatsJson(char *p,
                       ",\"local_speed\":%u"
                       ",\"filtered\":%u}"
                       ",\"altitude_suppressed\":%u"
+#ifndef _WIN32
                       ",\"cpu\":{\"demod\":%llu,\"reader\":%llu,\"background\":%llu}"
+#endif
                       ",\"tracks\":{\"all\":%u"
                       ",\"single_message\":%u}"
                       ",\"messages\":%u}",
@@ -1195,9 +1224,11 @@ static char * appendStatsJson(char *p,
                       st->cpr_local_speed_checks,
                       st->cpr_filtered,
                       st->suppressed_altitude_messages,
+#ifndef _WIN32
                       (unsigned long long)demod_cpu_millis,
                       (unsigned long long)reader_cpu_millis,
                       (unsigned long long)background_cpu_millis,
+#endif
                       st->unique_aircraft,
                       st->single_message_aircraft,
                       st->messages_total);
@@ -1297,12 +1328,15 @@ char *generateHistoryJson(const char *url_path, int *len)
 // Write JSON to file
 void writeJsonToFile(const char *file, char * (*generator) (const char *,int*))
 {
-#ifndef _WIN32
     char pathbuf[PATH_MAX];
     char tmppath[PATH_MAX];
     int fd;
     int len = 0;
+#ifndef _WIN32
     mode_t mask;
+#else
+    char *tp;
+#endif
     char *content;
 
     if (!Modes.json_dir)
@@ -1310,6 +1344,7 @@ void writeJsonToFile(const char *file, char * (*generator) (const char *,int*))
 
     snprintf(tmppath, PATH_MAX, "%s/%s.XXXXXX", Modes.json_dir, file);
     tmppath[PATH_MAX-1] = 0;
+#ifndef _WIN32
     fd = mkstemp(tmppath);
     if (fd < 0)
         return;
@@ -1317,6 +1352,14 @@ void writeJsonToFile(const char *file, char * (*generator) (const char *,int*))
     mask = umask(0);
     umask(mask);
     fchmod(fd, 0644 & ~mask);
+#else
+    tp = _mktemp(tmppath);
+    if (tp == NULL)
+        return;
+
+    if ( _sopen_s(&fd, tp, _O_RDWR | _O_CREAT, _SH_DENYNO, _S_IREAD | _S_IWRITE) )
+        return;
+#endif
 
     snprintf(pathbuf, PATH_MAX, "/data/%s", file);
     pathbuf[PATH_MAX-1] = 0;
@@ -1330,7 +1373,12 @@ void writeJsonToFile(const char *file, char * (*generator) (const char *,int*))
 
     snprintf(pathbuf, PATH_MAX, "%s/%s", Modes.json_dir, file);
     pathbuf[PATH_MAX-1] = 0;
+#ifndef _WIN32
     rename(tmppath, pathbuf);
+#else
+    CopyFileA(tmppath, pathbuf, FALSE);
+    unlink(tmppath);
+#endif
     free(content);
     return;
 
@@ -1340,9 +1388,7 @@ void writeJsonToFile(const char *file, char * (*generator) (const char *,int*))
     unlink(tmppath);
     free(content);
     return;
-#endif
 }
-
 
 #ifdef ENABLE_WEBSERVER
 
@@ -1579,7 +1625,9 @@ static void modesReadFromClient(struct client *c) {
         nread = read(c->fd, c->buf+c->buflen, left);
 #else
         nread = recv(c->fd, c->buf+c->buflen, left, 0);
-        if (nread < 0) {errno = WSAGetLastError();}
+        if (nread < 0) {
+            errno = WSAGetLastError();
+        }
 #endif
 
         // If we didn't get all the data we asked for, then return once we've processed what we did get.
@@ -1595,7 +1643,7 @@ static void modesReadFromClient(struct client *c) {
 #ifndef _WIN32
         if (nread < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) // No data available (not really an error)
 #else
-        if (nread < 0 && errno == EWOULDBLOCK) // No data available (not really an error)
+        if (nread < 0 && errno == WSAEWOULDBLOCK) // No data available (not really an error)
 #endif
         {
             return;

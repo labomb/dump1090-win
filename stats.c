@@ -63,7 +63,7 @@ void display_stats(struct stats *st) {
     int j;
     time_t tt_start, tt_end;
     struct tm tm_start, tm_end;
-    char tb_start[30], tb_end[30];
+    char tb_start[128], tb_end[128];
 
     printf("\n\n");
 
@@ -160,6 +160,9 @@ void display_stats(struct stats *st) {
         printf("%d HTTP requests\n", st->http_requests);
 #endif
 
+    // there is no CLOCK_THREAD_CPUTIME_ID support in Windows, so the following
+    // CPU stats are pretty useless
+#ifndef _WIN32
     {
         uint64_t demod_cpu_millis = (uint64_t)st->demod_cpu.tv_sec*1000UL + st->demod_cpu.tv_nsec/1000000UL;
         uint64_t reader_cpu_millis = (uint64_t)st->reader_cpu.tv_sec*1000UL + st->reader_cpu.tv_nsec/1000000UL;
@@ -174,6 +177,7 @@ void display_stats(struct stats *st) {
                (unsigned long long) reader_cpu_millis,
                (unsigned long long) background_cpu_millis);
     }
+#endif
 
     if (Modes.stats_range_histo)
         display_range_histogram(st);
@@ -213,7 +217,7 @@ static void display_range_histogram(struct stats *st)
     }
 
     for (i = 0; i < RANGE_BUCKET_COUNT; ++i) {
-        heights[i] = st->range_histogram[i] * 20.0 * NPIXELS / peak;
+        heights[i] = (int)(st->range_histogram[i] * 20.0 * NPIXELS / peak);
         if (st->range_histogram[i] > 0 && heights[i] == 0)
             heights[i] = 1;
     }
@@ -242,7 +246,7 @@ static void display_range_histogram(struct stats *st)
     printf("\n");
 
     for (i = 0; i < RANGE_BUCKET_COUNT/4; ++i) {
-        int midpoint = round((i*4+1.5) * Modes.maxRange / RANGE_BUCKET_COUNT / 1000);
+        int midpoint = (int)(round((i*4+1.5) * Modes.maxRange / RANGE_BUCKET_COUNT / 1000));
         printf("%03d ", midpoint);
     }
     printf("km\n");

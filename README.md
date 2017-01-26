@@ -1,9 +1,10 @@
 # dump1090-mutability Debian/Raspbian packages
-[![Build Status](https://travis-ci.org/mutability/dump1090.svg?branch=master)](https://travis-ci.org/mutability/dump1090)
 
 This is a fork of MalcolmRobb's version of dump1090
 that adds new functionality and is designed to be built as
 a Debian/Raspbian package.
+
+Please see README-Windows.md for details on building this package on Windows.
 
 This version is licensed under the GPL (v2 or later).
 See the file COPYING for details.

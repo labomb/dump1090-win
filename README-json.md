@@ -99,6 +99,7 @@ Each period has the following subkeys:
    * unknown_icao: number of Mode S messages which looked like they might be valid but we didn't recognize the ICAO address and it was one of the message types where we can't be sure it's valid in this case.
    * accepted: array. Index N has the number of valid Mode S messages accepted with N-bit errors corrected.
    * http_requests: number of HTTP requests handled.
+ ****** NOTE: the following cpu statistics are not available in the Windows build ******
  * cpu: statistics about CPU use. Has subkeys:
    * demod: milliseconds spent doing demodulation and decoding in response to data from a SDR dongle
    * reader: milliseconds spent reading sample data over USB from a SDR dongle

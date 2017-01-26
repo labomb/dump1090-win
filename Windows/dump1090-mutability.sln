@@ -1,0 +1,34 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 2013
+VisualStudioVersion = 12.0.21005.1
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "dump1090", "dump1090\dump1090.vcxproj", "{F9754767-6551-40FD-BCC4-6E2F73C4CAE9}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "view1090", "view1090\view1090.vcxproj", "{8ADEC0FF-2287-4493-AD5E-18ED8425E190}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "faup1090", "faup1090\faup1090.vcxproj", "{B0D63271-B464-4C1E-B44C-AF9BF5A27E68}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Win32 = Debug|Win32
+		Release|Win32 = Release|Win32
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{F9754767-6551-40FD-BCC4-6E2F73C4CAE9}.Debug|Win32.ActiveCfg = Debug|Win32
+		{F9754767-6551-40FD-BCC4-6E2F73C4CAE9}.Debug|Win32.Build.0 = Debug|Win32
+		{F9754767-6551-40FD-BCC4-6E2F73C4CAE9}.Release|Win32.ActiveCfg = Release|Win32
+		{F9754767-6551-40FD-BCC4-6E2F73C4CAE9}.Release|Win32.Build.0 = Release|Win32
+		{8ADEC0FF-2287-4493-AD5E-18ED8425E190}.Debug|Win32.ActiveCfg = Debug|Win32
+		{8ADEC0FF-2287-4493-AD5E-18ED8425E190}.Debug|Win32.Build.0 = Debug|Win32
+		{8ADEC0FF-2287-4493-AD5E-18ED8425E190}.Release|Win32.ActiveCfg = Release|Win32
+		{8ADEC0FF-2287-4493-AD5E-18ED8425E190}.Release|Win32.Build.0 = Release|Win32
+		{B0D63271-B464-4C1E-B44C-AF9BF5A27E68}.Debug|Win32.ActiveCfg = Debug|Win32
+		{B0D63271-B464-4C1E-B44C-AF9BF5A27E68}.Debug|Win32.Build.0 = Debug|Win32
+		{B0D63271-B464-4C1E-B44C-AF9BF5A27E68}.Release|Win32.ActiveCfg = Release|Win32
+		{B0D63271-B464-4C1E-B44C-AF9BF5A27E68}.Release|Win32.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

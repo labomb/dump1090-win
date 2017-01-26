@@ -302,7 +302,7 @@ void demodulate2400(struct mag_buf *mag)
 
         // compute message receive time as block-start-time + difference in the 12MHz clock
         mm.sysTimestampMsg = mag->sysTimestamp; // start of block time
-        mm.sysTimestampMsg.tv_nsec += receiveclock_ns_elapsed(mag->sampleTimestamp, mm.timestampMsg);
+        mm.sysTimestampMsg.tv_nsec += (long)(receiveclock_ns_elapsed(mag->sampleTimestamp, mm.timestampMsg));
         normalize_timespec(&mm.sysTimestampMsg);
 
         mm.score = bestscore;
@@ -527,7 +527,7 @@ void demodulate2400AC(struct mag_buf *mag)
         //   v
         //  ----- X1/X2/X3 average noise
 
-        float midpoint = sqrtf(x1x2x3_noise * f1f2_signal); // so that signal/midpoint == midpoint/noise
+        float midpoint = sqrtf((float)(x1x2x3_noise * f1f2_signal)); // so that signal/midpoint == midpoint/noise
         unsigned quiet_threshold = (unsigned) midpoint;
         unsigned noise_threshold = (unsigned) (midpoint * 0.707107 + 0.5); // -3dB from midpoint
         unsigned signal_threshold = (unsigned) (midpoint * 1.414214 + 0.5); // +3dB from midpoint
@@ -648,7 +648,7 @@ void demodulate2400AC(struct mag_buf *mag)
         // compute message receive time as block-start-time + difference in the 12MHz clock
         mm.timestampMsg = mag->sampleTimestamp + f1_clock / 5;  // 60MHz -> 12MHz
         mm.sysTimestampMsg = mag->sysTimestamp; // start of block time
-        mm.sysTimestampMsg.tv_nsec += receiveclock_ns_elapsed(mag->sampleTimestamp, mm.timestampMsg);
+        mm.sysTimestampMsg.tv_nsec += (long)(receiveclock_ns_elapsed(mag->sampleTimestamp, mm.timestampMsg));
         normalize_timespec(&mm.sysTimestampMsg);
 
         decodeModeAMessage(&mm, modeac);

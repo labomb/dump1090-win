@@ -50,7 +50,11 @@
 #include "util.h"
 
 #include <stdlib.h>
+#ifndef _WIN32
 #include <sys/time.h>
+#else
+#include "compat/compat.h"
+#endif
 
 uint64_t mstime(void)
 {

@@ -67,6 +67,9 @@ static void faupInitConfig(void) {
     Modes.quiet                   = 1;
     Modes.net_output_flush_size   = MODES_OUT_FLUSH_SIZE;
     Modes.net_output_flush_interval = 200; // milliseconds
+#ifdef _WIN32
+    Modes.isSocket                = 1;
+#endif
 }
 
 //
@@ -102,9 +105,9 @@ static void faupInit(void) {
 //
 static void showHelp(void) {
     printf(
-"-----------------------------------------------------------------------------\n"
+"-------------------------------------------------------------------------------\n"
 "| faup1090 ModeS conversion     %45s |\n"
-"-----------------------------------------------------------------------------\n"
+"-------------------------------------------------------------------------------\n"
 "--net-bo-ipaddr <addr>   IP address to connect to for Beast data (default: 127.0.0.1)\n"
 "--net-bo-port <port>     Port to connect for Beast data (default: 30005)\n"
 "--lat <latitude>         Reference/receiver latitude for surface posn (opt)\n"
@@ -213,12 +216,28 @@ int main(int argc, char **argv) {
 
     // Set up output connection on stdout
     fatsv_output = makeFatsvOutputService();
+#ifdef _WIN32
+    Modes.isSocket = 0;  // stdout can't be treated like a socket on Windows
+#endif
     createGenericClient(fatsv_output, STDOUT_FILENO);
 
     // Run it until we've lost either connection
-    while (!Modes.exit && beast_input->connections && fatsv_output->connections) {
+#ifndef _WIN32
+    while (!Modes.exit && beast_input->connections && fatsv_output->connections)
+#else
+    while (!Modes.exit && beast_input->connections)
+#endif
+    {
         backgroundTasks();
         usleep(100000);
+#ifdef _WIN32
+        // Windows doesn't do non-blocking stdout, so re-connect if needed (bit of a
+        // hack... probably should use named pipes, which can be non-blocking)
+        if (fatsv_output->connections == 0) {
+            // assumes modesCloseClient() was called on previous client!
+            createGenericClient(fatsv_output, STDOUT_FILENO);
+        }
+#endif
     }
 
     return 0;

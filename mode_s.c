@@ -1034,7 +1034,7 @@ static void decodeESTargetStatus(struct modesMessage *mm, int check_imf)
             mm->tss.baro_valid = 0;
         } else {
             mm->tss.baro_valid = 1;
-            mm->tss.baro = 800.0 + (baro_bits - 1) * 0.8;
+            mm->tss.baro = (float)(800.0 + (baro_bits - 1) * 0.8);
         }
 
         mm->tss.heading_valid = getbit(me, 30);

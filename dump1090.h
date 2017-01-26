@@ -61,25 +61,23 @@
 
 // ============================= Include files ==========================
 
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <pthread.h>
+#include <stdint.h>
+#include <errno.h>
+#include <math.h>
+#include <signal.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <time.h>
+#include <ctype.h>
+#include <limits.h>
 #ifndef _WIN32
-    #include <stdio.h>
-    #include <string.h>
-    #include <stdlib.h>
-    #include <pthread.h>
-    #include <stdint.h>
-    #include <errno.h>
-    #include <unistd.h>
-    #include <math.h>
-    #include <sys/time.h>
-    #include <signal.h>
-    #include <fcntl.h>
-    #include <ctype.h>
-    #include <sys/stat.h>
-    #include <sys/ioctl.h>
-    #include <time.h>
-    #include <limits.h>
-#else
-    #include "winstubs.h" //Put everything Windows specific in here
+#include <unistd.h>
+#include <sys/time.h>
+#include <sys/ioctl.h>
 #endif
 
 #include "compat/compat.h"
@@ -308,6 +306,7 @@ struct {                             // Internal state
 
 #ifdef _WIN32
     WSADATA        wsaData;          // Windows socket initialisation
+    int            isSocket;         // Windows treats sockets and files differently
 #endif
 
     // Configuration

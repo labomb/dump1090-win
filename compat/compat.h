@@ -20,7 +20,11 @@
 
 #else // other platforms
 
-# include <endian.h>
+  #ifndef _WIN32
+    #include <endian.h>   
+  #else
+    #include "../Windows/include/winstubs.h"
+  #endif
 
 #endif
 

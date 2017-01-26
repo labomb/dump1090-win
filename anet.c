@@ -52,19 +52,23 @@
  */
 
 #include <sys/types.h>
-#include <sys/socket.h>
 #include <sys/stat.h>
+#include <fcntl.h>
+#include <string.h>
+#include <errno.h>
+#include <stdarg.h>
+#include <stdio.h>
+#ifndef _WIN32
+#include <sys/socket.h>
 #include <sys/un.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <arpa/inet.h>
 #include <unistd.h>
-#include <fcntl.h>
-#include <string.h>
 #include <netdb.h>
-#include <errno.h>
-#include <stdarg.h>
-#include <stdio.h>
+#else
+#include "compat/compat.h"
+#endif
 
 #include "anet.h"
 
@@ -81,7 +85,7 @@ static void anetSetError(char *err, const char *fmt, ...)
 int anetNonBlock(char *err, int fd)
 {
     int flags;
-
+#ifndef _WIN32
     /* Set the socket nonblocking.
      * Note that fcntl(2) for F_GETFL and F_SETFL can't be
      * interrupted by a signal. */
@@ -93,6 +97,14 @@ int anetNonBlock(char *err, int fd)
         anetSetError(err, "fcntl(F_SETFL,O_NONBLOCK): %s", strerror(errno));
         return ANET_ERR;
     }
+#else
+    flags = 1;
+    if (ioctlsocket(fd, FIONBIO, &flags)) {
+        errno = WSAGetLastError();
+        anetSetError(err, "ioctlsocket(FIONBIO): %s", strerror(errno));
+        return ANET_ERR;
+    }
+#endif
 
     return ANET_OK;
 }
@@ -102,6 +114,9 @@ int anetTcpNoDelay(char *err, int fd)
     int yes = 1;
     if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (void*)&yes, sizeof(yes)) == -1)
     {
+#ifdef _WIN32
+        errno = WSAGetLastError();
+#endif
         anetSetError(err, "setsockopt TCP_NODELAY: %s", strerror(errno));
         return ANET_ERR;
     }
@@ -112,6 +127,9 @@ int anetSetSendBuffer(char *err, int fd, int buffsize)
 {
     if (setsockopt(fd, SOL_SOCKET, SO_SNDBUF, (void*)&buffsize, sizeof(buffsize)) == -1)
     {
+#ifdef _WIN32
+        errno = WSAGetLastError();
+#endif
         anetSetError(err, "setsockopt SO_SNDBUF: %s", strerror(errno));
         return ANET_ERR;
     }
@@ -122,6 +140,9 @@ int anetTcpKeepAlive(char *err, int fd)
 {
     int yes = 1;
     if (setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, (void*)&yes, sizeof(yes)) == -1) {
+#ifdef _WIN32
+        errno = WSAGetLastError();
+#endif
         anetSetError(err, "setsockopt SO_KEEPALIVE: %s", strerror(errno));
         return ANET_ERR;
     }
@@ -132,6 +153,9 @@ static int anetCreateSocket(char *err, int domain)
 {
     int s, on = 1;
     if ((s = socket(domain, SOCK_STREAM, 0)) == -1) {
+#ifdef _WIN32
+        errno = WSAGetLastError();
+#endif
         anetSetError(err, "creating socket: %s", strerror(errno));
         return ANET_ERR;
     }
@@ -139,6 +163,9 @@ static int anetCreateSocket(char *err, int domain)
     /* Make sure connection-intensive things like the redis benckmark
      * will be able to close/open sockets a zillion of times */
     if (setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (void*)&on, sizeof(on)) == -1) {
+#ifdef _WIN32
+        errno = WSAGetLastError();
+#endif
         anetSetError(err, "setsockopt SO_REUSEADDR: %s", strerror(errno));
         return ANET_ERR;
     }
@@ -183,13 +210,23 @@ static int anetTcpGenericConnect(char *err, char *addr, char *service, int flags
             return s;
         }
 
-        if (errno == EINPROGRESS && (flags & ANET_CONNECT_NONBLOCK)) {
+#ifndef _WIN32
+        if (errno == EINPROGRESS && (flags & ANET_CONNECT_NONBLOCK))
+#else
+        errno = WSAGetLastError();
+        if (errno == WSAEINPROGRESS && (flags & ANET_CONNECT_NONBLOCK))
+#endif
+        {
             freeaddrinfo(gai_result);
             return s;
         }
 
         anetSetError(err, "connect: %s", strerror(errno));
+#ifndef _WIN32
         close(s);
+#else
+        closesocket((SOCKET)s);
+#endif
     }
 
     freeaddrinfo(gai_result);
@@ -212,7 +249,11 @@ int anetRead(int fd, char *buf, int count)
 {
     int nread, totlen = 0;
     while(totlen != count) {
+#ifndef _WIN32
         nread = read(fd,buf,count-totlen);
+#else
+        nread = recv(fd, buf, count-totlen, 0);
+#endif
         if (nread == 0) return totlen;
         if (nread == -1) return -1;
         totlen += nread;
@@ -227,7 +268,11 @@ int anetWrite(int fd, char *buf, int count)
 {
     int nwritten, totlen = 0;
     while(totlen != count) {
+#ifndef _WIN32
         nwritten = write(fd,buf,count-totlen);
+#else
+        nwritten = send(fd, buf, count-totlen, 0);
+#endif
         if (nwritten == 0) return totlen;
         if (nwritten == -1) return -1;
         totlen += nwritten;
@@ -239,12 +284,19 @@ int anetWrite(int fd, char *buf, int count)
 static int anetListen(char *err, int s, struct sockaddr *sa, socklen_t len) {
     if (sa->sa_family == AF_INET6) {
         int on = 1;
-        setsockopt(s, IPPROTO_IPV6, IPV6_V6ONLY, &on, sizeof(on));
+        setsockopt(s, IPPROTO_IPV6, IPV6_V6ONLY, (char *) &on, sizeof(on));
     }
 
     if (bind(s,sa,len) == -1) {
+#ifdef _WIN32
+        errno = WSAGetLastError();
+#endif
         anetSetError(err, "bind: %s", strerror(errno));
+#ifndef _WIN32
         close(s);
+#else
+        closesocket((SOCKET)s);
+#endif
         return ANET_ERR;
     }
 
@@ -252,8 +304,15 @@ static int anetListen(char *err, int s, struct sockaddr *sa, socklen_t len) {
      * the kernel does: backlogsize = roundup_pow_of_two(backlogsize + 1);
      * which will thus give us a backlog of 512 entries */
     if (listen(s, 511) == -1) {
+#ifdef _WIN32
+        errno = WSAGetLastError();
+#endif
         anetSetError(err, "listen: %s", strerror(errno));
+#ifndef _WIN32
         close(s);
+#else
+        closesocket((SOCKET)s);
+#endif
         return ANET_ERR;
     }
     return ANET_OK;
@@ -303,7 +362,13 @@ static int anetGenericAccept(char *err, int s, struct sockaddr *sa, socklen_t *l
     while(1) {
         fd = accept(s,sa,len);
         if (fd == -1) {
-            if (errno == EINTR) {
+#ifndef _WIN32
+            if (errno == EINTR)
+#else
+            errno = WSAGetLastError();
+            if (errno == WSAEINTR)
+#endif
+            {
                 continue;
             } else {
                 anetSetError(err, "accept: %s", strerror(errno));

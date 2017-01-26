@@ -188,7 +188,7 @@ static void update_range_histogram(double lat, double lon)
 {
     if (Modes.stats_range_histo && (Modes.bUserFlags & MODES_USER_LATLON_VALID)) {
         double range = greatcircle(Modes.fUserLat, Modes.fUserLon, lat, lon);
-        int bucket = round(range / Modes.maxRange * RANGE_BUCKET_COUNT);
+        int bucket = (int)(round(range / Modes.maxRange * RANGE_BUCKET_COUNT));
 
         if (bucket < 0)
             bucket = 0;

@@ -126,6 +126,7 @@ static void end_cpu_timing(const struct timespec *start_time, struct timespec *a
 {
     struct timespec end_time;
     clock_gettime(CLOCK_THREAD_CPUTIME_ID, &end_time);
+
     add_to->tv_sec += (end_time.tv_sec - start_time->tv_sec - 1);
     add_to->tv_nsec += (1000000000L + end_time.tv_nsec - start_time->tv_nsec);
     add_to->tv_sec += add_to->tv_nsec / 1000000000L;
@@ -159,6 +160,9 @@ void modesInitConfig(void) {
     Modes.json_interval           = 1000;
     Modes.json_location_accuracy  = 1;
     Modes.maxRange                = 1852 * 300; // 300NM default max range
+#ifdef _WIN32
+    Modes.isSocket                = 1;
+#endif
 }
 //
 //=========================================================================
@@ -172,10 +176,10 @@ void modesInit(void) {
     Modes.sample_rate = 2400000.0;
 
     // Allocate the various buffers used by Modes
-    Modes.trailing_samples = (MODES_PREAMBLE_US + MODES_LONG_MSG_BITS + 16) * 1e-6 * Modes.sample_rate;
+    Modes.trailing_samples = (unsigned int)((MODES_PREAMBLE_US + MODES_LONG_MSG_BITS + 16) * 1e-6 * Modes.sample_rate);
 
-    if ( ((Modes.maglut     = (uint16_t *) malloc(sizeof(uint16_t) * 256 * 256)                                 ) == NULL) ||
-         ((Modes.log10lut   = (uint16_t *) malloc(sizeof(uint16_t) * 256 * 256)                                 ) == NULL) )
+    if ( ((Modes.maglut     = (uint16_t *) malloc(sizeof(uint16_t) * 256 * 256) ) == NULL) ||
+         ((Modes.log10lut   = (uint16_t *) malloc(sizeof(uint16_t) * 256 * 256) ) == NULL) )
     {
         fprintf(stderr, "Out of memory allocating data buffer.\n");
         exit(1);
@@ -224,8 +228,8 @@ void modesInit(void) {
         for (q = 0; q <= 255; q++) {
             float fI, fQ, magsq;
 
-            fI = (i - 127.5) / 127.5;
-            fQ = (q - 127.5) / 127.5;
+            fI = (float)((i - 127.5) / 127.5);
+            fQ = (float)((q - 127.5) / 127.5);
             magsq = fI * fI + fQ * fQ;
             if (magsq > 1)
                 magsq = 1;
@@ -448,11 +452,12 @@ void rtlsdrCallback(unsigned char *buf, uint32_t len, void *ctx) {
     pthread_mutex_unlock(&Modes.data_mutex);
 
     // Compute the sample timestamp and system timestamp for the start of the block
-    outbuf->sampleTimestamp = lastbuf->sampleTimestamp + 12e6 * (lastbuf->length + outbuf->dropped) / Modes.sample_rate;
-    block_duration = 1e9 * slen / Modes.sample_rate;
+    outbuf->sampleTimestamp = (uint64_t)(lastbuf->sampleTimestamp + 12e6 * (lastbuf->length + outbuf->dropped) / Modes.sample_rate);
+    block_duration = (unsigned int)(1e9 * slen / Modes.sample_rate);
 
     // Get the approx system time for the start of this block
     clock_gettime(CLOCK_REALTIME, &outbuf->sysTimestamp);
+
     outbuf->sysTimestamp.tv_nsec -= block_duration;
     normalize_timespec(&outbuf->sysTimestamp);
 
@@ -530,7 +535,7 @@ void readDataFromFile(void) {
         pthread_mutex_unlock(&Modes.data_mutex);
 
         // Compute the sample timestamp and system timestamp for the start of the block
-        outbuf->sampleTimestamp = lastbuf->sampleTimestamp + 12e6 * lastbuf->length / Modes.sample_rate;
+        outbuf->sampleTimestamp = (uint64_t)(lastbuf->sampleTimestamp + 12e6 * lastbuf->length / Modes.sample_rate);
 
         // Copy trailing data from last block (or reset if not valid)
         if (lastbuf->length >= Modes.trailing_samples) {
@@ -551,7 +556,11 @@ void readDataFromFile(void) {
                 eof = 1;
                 break;
             }
+#ifndef _WIN32
             r += nread;
+#else
+            (char *)r += nread;
+#endif
             toread -= nread;
         }
 
@@ -566,7 +575,7 @@ void readDataFromFile(void) {
                 ;
 
             // compute the time we can deliver the next buffer.
-            next_buffer_delivery.tv_nsec += outbuf->length * 1e9 / Modes.sample_rate;
+            next_buffer_delivery.tv_nsec += (long)(outbuf->length * 1e9 / Modes.sample_rate);
             normalize_timespec(&next_buffer_delivery);
         }
 
@@ -1086,7 +1095,6 @@ int main(int argc, char **argv) {
             // Ignored
         } else if (!strcmp(argv[j], "--html-dir") && more) {
             Modes.html_dir = strdup(argv[++j]);
-#ifndef _WIN32
         } else if (!strcmp(argv[j], "--write-json") && more) {
             Modes.json_dir = strdup(argv[++j]);
         } else if (!strcmp(argv[j], "--write-json-every") && more) {
@@ -1095,7 +1103,6 @@ int main(int argc, char **argv) {
                 Modes.json_interval = 100;
         } else if (!strcmp(argv[j], "--json-location-accuracy") && more) {
             Modes.json_location_accuracy = atoi(argv[++j]);
-#endif
         } else {
             fprintf(stderr,
                 "Unknown or not enough arguments for option '%s'.\n\n",
@@ -1104,11 +1111,6 @@ int main(int argc, char **argv) {
             exit(1);
         }
     }
-
-#ifdef _WIN32
-    // Try to comply with the Copyright license conditions for binary distribution
-    if (!Modes.quiet) {showCopyright();}
-#endif
 
 #ifndef _WIN32
     // Setup for SIGWINCH for handling lines
@@ -1129,10 +1131,10 @@ int main(int argc, char **argv) {
         if (Modes.filename[0] == '-' && Modes.filename[1] == '\0') {
             Modes.fd = STDIN_FILENO;
         } else if ((Modes.fd = open(Modes.filename,
-#ifdef _WIN32
-                                    (O_RDONLY | O_BINARY)
-#else
+#ifndef _WIN32
                                     (O_RDONLY)
+#else
+                                    (O_RDONLY | O_BINARY)
 #endif
                                     )) == -1) {
             perror("Opening data file");

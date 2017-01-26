@@ -105,8 +105,8 @@ static void convert_uc8_generic(void *iq_data,
     for (i = 0; i < nsamples; ++i) {
         I = *in++;
         Q = *in++;
-        fI = (I - 127.5) / 127.5;
-        fQ = (Q - 127.5) / 127.5;
+        fI = (float)((I - 127.5) / 127.5);
+        fQ = (float)((Q - 127.5) / 127.5);
 
         // DC block
         z1_I = fI * dc_a + z1_I * dc_b;
@@ -149,8 +149,8 @@ static void convert_sc16_generic(void *iq_data,
     for (i = 0; i < nsamples; ++i) {
         I = (int16_t)le16toh(*in++);
         Q = (int16_t)le16toh(*in++);
-        fI = I / 32768.0;
-        fQ = Q / 32768.0;
+        fI = (float)(I / 32768.0);
+        fQ = (float)(Q / 32768.0);
 
         // DC block
         z1_I = fI * dc_a + z1_I * dc_b;
@@ -193,8 +193,8 @@ static void convert_sc16q11_generic(void *iq_data,
     for (i = 0; i < nsamples; ++i) {
         I = (int16_t)le16toh(*in++);
         Q = (int16_t)le16toh(*in++);
-        fI = I / 2048.0;
-        fQ = Q / 2048.0;
+        fI = (float)(I / 2048.0);
+        fQ = (float)(Q / 2048.0);
 
         // DC block
         z1_I = fI * dc_a + z1_I * dc_b;
@@ -265,8 +265,8 @@ iq_convert_fn init_converter(input_format_t format,
 
     if (filter_dc) {
         // init DC block @ 1Hz
-        (*out_state)->dc_b = exp(-2.0 * M_PI * 1.0 / sample_rate);
-        (*out_state)->dc_a = 1.0 - (*out_state)->dc_b;
+        (*out_state)->dc_b = (float)(exp(-2.0 * M_PI * 1.0 / sample_rate));
+        (*out_state)->dc_a = (float)(1.0 - (*out_state)->dc_b);
     } else {
         // if the converter does filtering, make sure it has no effect
         (*out_state)->dc_b = 1.0;

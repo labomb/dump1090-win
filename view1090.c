@@ -70,6 +70,9 @@ void view1090InitConfig(void) {
     Modes.interactive_display_ttl = MODES_INTERACTIVE_DISPLAY_TTL;
     Modes.interactive             = 1;
     Modes.maxRange                = 1852 * 300; // 300NM default max range
+#ifdef _WIN32
+    Modes.isSocket                = 1;
+#endif
 }
 //
 //=========================================================================
@@ -123,7 +126,7 @@ void showHelp(void) {
 "| view1090 ModeS Viewer       %45s |\n"
 "-----------------------------------------------------------------------------\n"
   "--no-interactive         Disable interactive mode, print messages to stdout\n"
-  "--interactive-rows <num> Max number of rows in interactive mode (default: 15)\n"
+  "--interactive-rows <num> Max number of rows in interactive mode (default: 22)\n"
   "--interactive-ttl <sec>  Remove from list if idle for <sec> (default: 60)\n"
   "--interactive-rtl1090    Display flight table in RTL1090 format\n"
   "--modeac                 Enable decoding of SSR modes 3/A & 3/C\n"
@@ -205,12 +208,6 @@ int main(int argc, char **argv) {
             exit(1);
         }
     }
-
-#ifdef _WIN32
-    // Try to comply with the Copyright license conditions for binary distribution
-    if (!Modes.quiet) {showCopyright();}
-#define MSG_DONTWAIT 0
-#endif
 
 #ifndef _WIN32
     // Setup for SIGWINCH for handling lines
