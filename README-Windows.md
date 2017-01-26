@@ -18,23 +18,23 @@ To use the pre-built packages:
 
 The Visual Studio project files included with this package expect to find the prerequisite build files extracted from these archives in the following directories located in the source root:
 
-* Windows/lib
-- pthreadVC2.lib
-- rtlsdr.lib
+#### Windows/lib
+  pthreadVC2.lib
+  rtlsdr.lib
 
-* Windows/include
-- pthread.h
-- sched.h
-- semaphore.h
-- rtl-sdr.h
-- rtl-sdr_export.h
+#### Windows/include
+  pthread.h
+  sched.h
+  semaphore.h
+  rtl-sdr.h
+  rtl-sdr_export.h
 
 Optionally, you may wish to place the required runtime dlls extracted in the following directory (these dlls must be in the same directory as the dump1090, view1090, and faup1090 executables to successfully run):
 
-* Windows/dll
-- pthreadVC2.dll
-- rtlsdr.dll
-- libusb-1.0.dll
+#### Windows/dll
+  pthreadVC2.dll
+  rtlsdr.dll
+  libusb-1.0.dll
 
 Now open Windows/dump1090-mutability.sln with Visual Studio, choose 'Release', and then Build. The resulting executables will be located in the Windows/Release directory.
 
