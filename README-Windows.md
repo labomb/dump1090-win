@@ -45,7 +45,7 @@ Optionally, you may wish to place the required runtime dlls extracted in the fol
 * libusb-1.0.dll
 * airspy.dll         (if enabling Airspy support)
 
-Now open Windows/dump1090-mutability.sln with Visual Studio, choose 'Release', and then Build. The resulting executables will be located in the Windows/Release directory.
+Now open Windows/dump1090-win.sln with Visual Studio, choose 'Release', and then Build. The resulting executables will be located in the Windows/Release directory.
 
 # Important Additions To Visual Studio Configuration Properties
 
@@ -83,11 +83,11 @@ Now open Windows/dump1090-mutability.sln with Visual Studio, choose 'Release', a
 * ENABLE_WEBSERVER is defined in the provided dump1090 project file. Feel free to remove it if you do not wish to enable the local web server functionality.
 * Visual Studio 2013 was used to develop this package. No other version of VS has been tested.
 * Care has been taken to insure that this package will still build on the Debian/Raspbian platforms exactly as originally intended. Please let me know if I missed anything!
-
+ 
  
 >**Note about Airspy support:**
  The support for Airspy devices, as currently implemented, is certainly not optimal! Performance is hindered greatly by the need to resample so that the data is suitable for the demodulator code as written (which expects 8-bit samples at 2.4 MS/s). Ideally, equivalent demod code written to directly support the Airspy's 12-bit samples at 6 or 10 MS/s would be utilized. That said, writing said code is WAY beyond my abilities... hopefully someone out there will take the reins and make it happen!
-
+ 
  
  >**Note about Bias-t support for RTL-SDR.com V3 dongles:**
  If you wish to enable bias-t support, you must insure that you are building with a version of rtlsdr.lib that supports this capability. You can find suitable source package [here](https://github.com/rtlsdrblog/rtl_biast) and [here](https://github.com/librtlsdr/librtlsdr/tree/master/src), and binary distributions [here](https://github.com/rtlsdrblog/rtl-sdr/releases/tag/v1.1) and [here](https://github.com/librtlsdr/librtlsdr/releases/tag/v0.7.0).
