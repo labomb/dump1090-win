@@ -74,6 +74,10 @@
 #include <time.h>
 #include <ctype.h>
 #include <limits.h>
+#ifdef HAVE_AIRSPY
+#include <airspy.h>
+#include <soxr.h>
+#endif
 #ifndef _WIN32
 #include <unistd.h>
 #include <sys/time.h>
@@ -87,16 +91,30 @@ typedef struct rtlsdr_dev rtlsdr_dev_t;
 
 // ============================= #defines ===============================
 
-#define MODES_DEFAULT_PPM          0
+
+/* RTLSDR defaults */
+#define MODES_DEFAULT_PPM          0                          // Parts per million offset
+#define MODES_MAX_RTL_GAIN         999999                     // Use max available gain
+#define MODES_RTL_BUFFERS          15                         // Number of RTL buffers
+#define MODES_RTL_BUF_SIZE         (16*16384)                 // 256k
+#define MODES_RTL_MAG_BUF_SAMPLES  (MODES_RTL_BUF_SIZE / 2)   // Each sample is 2 bytes
+#define MODES_RTL_MAG_BUFFERS      12                         // Number of magnitude buffers (should be smaller than RTL_BUFFERS for flowcontrol to work)
+/* AirSpy defaults */
+#define VGA_GAIN_MAX 15
+#define MIXER_GAIN_MAX 15
+#define LNA_GAIN_MAX 14
+#define LINEARITY_GAIN_MAX 21
+#define SENSITIVITY_GAIN_MAX 21
+#define AIRSPY_MIXER_GAIN 8
+#define AIRSPY_LNA_GAIN 1
+#define AIRSPY_VGA_GAIN 5
+#define MODES_ASPY_BUF_SIZE        (4*16384)                  // 64k
+#define MODES_ASPY_MAG_BUF_SAMPLES (MODES_ASPY_BUF_SIZE / 2)  // Each sample is 2 bytes
+#define MODES_ASPY_MAG_BUFFERS     128                        // Number of magnitude buffers
+
 #define MODES_DEFAULT_FREQ         1090000000
 #define MODES_DEFAULT_WIDTH        1000
 #define MODES_DEFAULT_HEIGHT       700
-#define MODES_RTL_BUFFERS          15                         // Number of RTL buffers
-#define MODES_RTL_BUF_SIZE         (16*16384)                 // 256k
-#define MODES_MAG_BUF_SAMPLES      (MODES_RTL_BUF_SIZE / 2)   // Each sample is 2 bytes
-#define MODES_MAG_BUFFERS          12                         // Number of magnitude buffers (should be smaller than RTL_BUFFERS for flowcontrol to work)
-#define MODES_AUTO_GAIN            -100                       // Use automatic gain
-#define MODES_MAX_GAIN             999999                     // Use max available gain
 #define MODES_MSG_SQUELCH_DB       4.0                        // Minimum SNR, in dB
 #define MODES_MSG_ENCODER_ERRS     3                          // Maximum number of encoding errors
 
@@ -267,16 +285,15 @@ struct {                             // Internal state
     pthread_mutex_t data_mutex;      // Mutex to synchronize buffer access
     pthread_cond_t  data_cond;       // Conditional variable associated
 
-    struct mag_buf  mag_buffers[MODES_MAG_BUFFERS];       // Converted magnitude buffers from RTL or file input
+    unsigned        sdr_buf_size;                         // sample buffer size
+    int             mag_buf_samples;                      // Number of magnitude samples
+    int             mag_buf_num;                          // Number of magnitude buffers
+    struct mag_buf *mag_buffers;                          // Converted magnitude buffers from SDR or file input
     unsigned        first_free_buffer;                    // Entry in mag_buffers that will next be filled with input.
     unsigned        first_filled_buffer;                  // Entry in mag_buffers that has valid data and will be demodulated next. If equal to next_free_buffer, there is no unprocessed data.
     struct timespec reader_cpu_accumulator;               // CPU time used by the reader thread, copied out and reset by the main thread under the mutex
-
     unsigned        trailing_samples;                     // extra trailing samples in magnitude buffers
-    double          sample_rate;                          // actual sample rate in use (in hz)
 
-    int             fd;              // --ifile option file descriptor
-    input_format_t  input_format;    // --iformat option
     uint16_t       *maglut;          // I/Q -> Magnitude lookup table
     uint16_t       *log10lut;        // Magnitude -> log10 lookup table
     int             exit;            // Exit from the main loop when true
@@ -286,13 +303,44 @@ struct {                             // Internal state
     iq_convert_fn  converter_function;
     struct converter_state *converter_state;
 
-    // RTLSDR
-    char *        dev_name;
-    int           gain;
-    int           enable_agc;
+    /* Input selection flags */
+    int           prefer_airspy;     // Airspy input
+    int           prefer_rtlsdr;     // rtlsdr input
+    int           prefer_file;       // File input
+    int           net_only;          // Enable just networking
+    // RTLSDR specific
+	int           rtl_enabled;
+    char         *dev_name;
+    int           rtl_gain;
     rtlsdr_dev_t *dev;
-    int           freq;
     int           ppm_error;
+#ifdef HAVE_RTL_BIAST
+    int           enable_rtlsdr_biast;
+#endif
+#ifdef HAVE_AIRSPY
+    // AIRSPY specific
+    int           airspy_enabled;
+    int           enable_linearity;
+    int           enable_sensitivity;
+    int           enable_airspy_biast;
+    uint8_t       linearity_gain;
+    uint8_t       sensitivity_gain;
+    uint8_t       mixer_gain;
+    uint8_t       lna_gain;
+    uint8_t       vga_gain;
+    struct airspy_device *airspy;
+    soxr_t        resampler;
+    char         *airspy_bytes, *airspy_scratch;
+#endif
+    // FILE specific
+    char         *filename;          // Input from file
+    int           fd;                // --ifile option file descriptor
+    input_format_t input_format;     // --iformat option
+
+    // Device configuration
+    double        sample_rate;       // actual sample rate in use (in hz)
+    int           freq;              // frequency
+    int           enable_agc;        // automatic gain control
 
     // Networking
     char           aneterr[ANET_ERR_LEN];
@@ -310,14 +358,12 @@ struct {                             // Internal state
 #endif
 
     // Configuration
-    char *filename;                  // Input form file, --ifile option
     int   nfix_crc;                  // Number of crc bit error(s) to correct
     int   check_crc;                 // Only display messages with good CRC
     int   raw;                       // Raw output format
     int   mode_ac;                   // Enable decoding of SSR Modes A & C
     int   debug;                     // Debugging mode
     int   net;                       // Enable networking
-    int   net_only;                  // Enable just networking
     uint64_t net_heartbeat_interval; // TCP heartbeat interval (milliseconds)
     int   net_output_flush_size;     // Minimum Size of output data
     uint64_t net_output_flush_interval; // Maximum interval (in milliseconds) between outputwrites

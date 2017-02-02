@@ -4,7 +4,8 @@ This is a fork of MalcolmRobb's version of dump1090
 that adds new functionality and is designed to be built as
 a Debian/Raspbian package.
 
-Please see README-Windows.md for details on building this package on Windows.
+Please see README-Windows.md for details on building this package on Windows. For details on building with
+Airspy support, please see README-Airspy.md.
 
 This version is licensed under the GPL (v2 or later).
 See the file COPYING for details.

@@ -6,6 +6,9 @@ Put the following in this directory:
  semaphore.h
  rtl-sdr.h
  rtl-sdr_export.h
+ airspy.h           (if enabling Airspy support)
+ airspy_commands.h  (if enabling Airspy support)
+ soxr.h             (if enabling Airspy support)
 
 Already provided:
 

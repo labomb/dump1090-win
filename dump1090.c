@@ -137,11 +137,17 @@ static void end_cpu_timing(const struct timespec *start_time, struct timespec *a
 // =============================== Initialization ===========================
 //
 void modesInitConfig(void) {
+
     // Default everything to zero/NULL
     memset(&Modes, 0, sizeof(Modes));
 
     // Now initialise things that should not be 0/NULL to their defaults
-    Modes.gain                    = MODES_MAX_GAIN;
+    Modes.rtl_gain                = MODES_MAX_RTL_GAIN;
+#ifdef HAVE_AIRSPY
+    Modes.mixer_gain              = AIRSPY_MIXER_GAIN;
+    Modes.lna_gain                = AIRSPY_LNA_GAIN;
+    Modes.vga_gain                = AIRSPY_VGA_GAIN;
+#endif
     Modes.freq                    = MODES_DEFAULT_FREQ;
     Modes.ppm_error               = MODES_DEFAULT_PPM;
     Modes.check_crc               = 1;
@@ -176,6 +182,19 @@ void modesInit(void) {
     Modes.sample_rate = 2400000.0;
 
     // Allocate the various buffers used by Modes
+    if (Modes.prefer_airspy) {  // airspy
+        Modes.sdr_buf_size = MODES_ASPY_BUF_SIZE;
+        Modes.mag_buf_samples = MODES_ASPY_MAG_BUF_SAMPLES;
+        Modes.mag_buf_num = MODES_ASPY_MAG_BUFFERS;
+    } else {  // rtlsdr or file
+        Modes.sdr_buf_size = MODES_RTL_BUF_SIZE;
+        Modes.mag_buf_samples = MODES_RTL_MAG_BUF_SAMPLES;
+        Modes.mag_buf_num = MODES_RTL_MAG_BUFFERS;
+    }
+
+    Modes.mag_buffers = malloc(sizeof(struct mag_buf) * Modes.mag_buf_num);
+    memset(Modes.mag_buffers, 0, sizeof(struct mag_buf) * Modes.mag_buf_num);
+
     Modes.trailing_samples = (unsigned int)((MODES_PREAMBLE_US + MODES_LONG_MSG_BITS + 16) * 1e-6 * Modes.sample_rate);
 
     if ( ((Modes.maglut     = (uint16_t *) malloc(sizeof(uint16_t) * 256 * 256) ) == NULL) ||
@@ -185,8 +204,8 @@ void modesInit(void) {
         exit(1);
     }
 
-    for (i = 0; i < MODES_MAG_BUFFERS; ++i) {
-        if ( (Modes.mag_buffers[i].data = calloc(MODES_MAG_BUF_SAMPLES+Modes.trailing_samples, sizeof(uint16_t))) == NULL ) {
+    for (i = 0; i < Modes.mag_buf_num; ++i) {
+        if ( (Modes.mag_buffers[i].data = calloc(Modes.mag_buf_samples+Modes.trailing_samples, sizeof(uint16_t))) == NULL ) {
             fprintf(stderr, "Out of memory allocating magnitude buffer.\n");
             exit(1);
         }
@@ -311,9 +330,8 @@ int modesInitRTLSDR(void) {
     }
 
     // Set gain, frequency, sample rate, and reset the device
-    rtlsdr_set_tuner_gain_mode(Modes.dev,
-        (Modes.gain == MODES_AUTO_GAIN) ? 0 : 1);
-    if (Modes.gain != MODES_AUTO_GAIN) {
+    rtlsdr_set_tuner_gain_mode(Modes.dev, (Modes.enable_agc) ? 0 : 1);
+    if (!Modes.enable_agc) {
         int *gains;
         int numgains;
 
@@ -330,7 +348,7 @@ int modesInitRTLSDR(void) {
             return -1;
         }
         
-        if (Modes.gain == MODES_MAX_GAIN) {
+        if (Modes.rtl_gain == MODES_MAX_RTL_GAIN) {
             int highest = -1;
             int i;
 
@@ -339,27 +357,27 @@ int modesInitRTLSDR(void) {
                     highest = gains[i];
             }
 
-            Modes.gain = highest;
-            fprintf(stderr, "Max available gain is: %.2f dB\n", Modes.gain/10.0);
+            Modes.rtl_gain = highest;
+            fprintf(stderr, "Max available gain is: %.2f dB\n", Modes.rtl_gain/10.0);
         } else {
             int closest = -1;
             int i;
 
             for (i = 0; i < numgains; ++i) {
-                if (closest == -1 || abs(gains[i] - Modes.gain) < abs(closest - Modes.gain))
+                if (closest == -1 || abs(gains[i] - Modes.rtl_gain) < abs(closest - Modes.rtl_gain))
                     closest = gains[i];
             }
 
-            if (closest != Modes.gain) {
-                Modes.gain = closest;
-                fprintf(stderr, "Closest available gain: %.2f dB\n", Modes.gain/10.0);
+            if (closest != Modes.rtl_gain) {
+                Modes.rtl_gain = closest;
+                fprintf(stderr, "Closest available gain: %.2f dB\n", Modes.rtl_gain/10.0);
             }
         }
 
         free(gains);
 
-        fprintf(stderr, "Setting gain to: %.2f dB\n", Modes.gain/10.0);
-        if (rtlsdr_set_tuner_gain(Modes.dev, Modes.gain) < 0) {
+        fprintf(stderr, "Setting gain to: %.2f dB\n", Modes.rtl_gain/10.0);
+        if (rtlsdr_set_tuner_gain(Modes.dev, Modes.rtl_gain) < 0) {
             fprintf(stderr, "Error setting tuner gains\n");
             return -1;
         }
@@ -375,8 +393,134 @@ int modesInitRTLSDR(void) {
     fprintf(stderr, "Gain reported by device: %.2f dB\n",
         rtlsdr_get_tuner_gain(Modes.dev)/10.0);
 
+#ifdef HAVE_RTL_BIAST
+    if (Modes.enable_rtlsdr_biast) {
+        rtlsdr_set_bias_tee(Modes.dev, 1);
+    } else {
+        rtlsdr_set_bias_tee(Modes.dev, 0);
+    }
+#endif
+
+	Modes.rtl_enabled = 1;
+
     return 0;
 }
+
+#ifdef HAVE_AIRSPY
+//
+// =============================== AirSpy handling ========================== 
+//
+int modesInitAirSpy(void) {
+    #define AIRSPY_STATUS(status, message) \
+        if (status != 0) { \
+        fprintf(stderr, "%s\n", message); \
+        airspy_close(Modes.airspy); \
+        airspy_exit(); \
+        return -1; \
+        } \
+
+    int status;
+    uint32_t count;
+    uint32_t *samplerates;
+    soxr_error_t sox_err = NULL;
+    soxr_io_spec_t ios = soxr_io_spec(SOXR_INT16_I, SOXR_INT16_I);
+    soxr_quality_spec_t qts = soxr_quality_spec(SOXR_MQ, 0);
+    soxr_runtime_spec_t rts = soxr_runtime_spec(2);
+
+    Modes.airspy_scratch = calloc(2 * Modes.sdr_buf_size, sizeof(int16_t));
+    Modes.airspy_bytes = malloc(2 * Modes.sdr_buf_size);
+    if ((Modes.airspy_bytes == NULL) || (Modes.airspy_scratch == NULL)) {
+        fprintf(stderr, "airspy buffer allocation failed.\n");
+        return -1;
+    }
+
+    status = airspy_init();
+    AIRSPY_STATUS(status, "airspy_init failed.");
+
+    status = airspy_open(&Modes.airspy);
+    AIRSPY_STATUS(status, "No AirSpy compatible devices found.");
+
+    status = airspy_get_samplerates(Modes.airspy, &count, 0);
+    AIRSPY_STATUS(status, "airspy_get_samplerates failed.");
+    samplerates = (uint32_t *)malloc(count * sizeof(uint32_t));
+    airspy_get_samplerates(Modes.airspy, samplerates, count);
+    // set the samplerate to the highest value available
+    status = airspy_set_samplerate(Modes.airspy, samplerates[0]);
+    AIRSPY_STATUS(status, "airspy_set_samplerate failed.");
+    // Configure the resampler using the airspy sample rate and the sample rate the demodulator expects
+    Modes.resampler = soxr_create(samplerates[0], Modes.sample_rate, 2, &sox_err, &ios, &qts, &rts);
+    if (sox_err) {
+        int e = errno;
+        fprintf(stderr, "soxr_create: %s; %s\n", soxr_strerror(sox_err), strerror(errno));
+        return -1;
+    }
+    free(samplerates);
+
+    if (Modes.enable_linearity) {
+        status = airspy_set_linearity_gain(Modes.airspy, Modes.linearity_gain);
+        AIRSPY_STATUS(status, "airspy_set_linearity_gain failed.");
+    }
+    else if (Modes.enable_sensitivity) {
+        status = airspy_set_sensitivity_gain(Modes.airspy, Modes.sensitivity_gain);
+        AIRSPY_STATUS(status, "airspy_set_sensitivity_gain failed.");
+    }
+    else {
+        if (Modes.enable_agc) {
+            status = airspy_set_mixer_agc(Modes.airspy, 1);
+            AIRSPY_STATUS(status, "airspy_set_mixer_agc failed.");
+            status = airspy_set_lna_agc(Modes.airspy, 1);
+            AIRSPY_STATUS(status, "airspy_set_lna_agc failed.");
+        }
+        else {
+            status = airspy_set_mixer_gain(Modes.airspy, Modes.mixer_gain);
+            AIRSPY_STATUS(status, "airspy_set_mixer_gain failed.");
+            status = airspy_set_lna_gain(Modes.airspy, Modes.lna_gain);
+            AIRSPY_STATUS(status, "airspy_set_lna_gain failed.");
+        }
+        status = airspy_set_vga_gain(Modes.airspy, Modes.vga_gain);
+        AIRSPY_STATUS(status, "airspy_set_vga_gain failed.");
+    }
+
+    status = airspy_set_sample_type(Modes.airspy, AIRSPY_SAMPLE_INT16_IQ);
+    AIRSPY_STATUS(status, "airspy_set_sample_type failed.");
+
+    status = airspy_set_freq(Modes.airspy, Modes.freq);
+    AIRSPY_STATUS(status, "airspy_set_freq failed.");
+
+    if (Modes.enable_airspy_biast) {
+        status = airspy_set_rf_bias(Modes.airspy, 1);
+        AIRSPY_STATUS(status, "airspy_set_rf_bias (on) failed.");
+    }
+    else {
+        status = airspy_set_rf_bias(Modes.airspy, 0);
+        AIRSPY_STATUS(status, "airspy_set_rf_bias (off) failed.");
+    }
+
+    fprintf(stderr, "AirSpy successfully initialized\n");
+    if (Modes.enable_linearity) {
+        fprintf(stderr, "Linearity Mode Gain: %i", Modes.linearity_gain);
+    }
+    else if (Modes.enable_sensitivity) {
+        fprintf(stderr, "Sensitivity Mode Gain: %i", Modes.sensitivity_gain);
+    }
+    else {
+        if (Modes.enable_agc) {
+            fprintf(stderr, "MIXER Gain: AGC, LNA Gain: AGC, VGA Gain: %i",
+                Modes.vga_gain);
+        }
+        else {
+            fprintf(stderr, "MIXER Gain: %i, LNA Gain: %i, VGA Gain: %i",
+                Modes.mixer_gain, Modes.lna_gain, Modes.vga_gain);
+        }
+    }
+    fprintf(stderr, ", AGC: %i\n", Modes.enable_agc);
+
+	Modes.airspy_enabled = 1;
+
+    return (0);
+}
+#endif
+
 //
 //=========================================================================
 //
@@ -410,20 +554,20 @@ void rtlsdrCallback(unsigned char *buf, uint32_t len, void *ctx) {
         rtlsdr_cancel_async(Modes.dev); // ask our caller to exit
     }
 
-    next_free_buffer = (Modes.first_free_buffer + 1) % MODES_MAG_BUFFERS;
+    next_free_buffer = (Modes.first_free_buffer + 1) % Modes.mag_buf_num;
     outbuf = &Modes.mag_buffers[Modes.first_free_buffer];
-    lastbuf = &Modes.mag_buffers[(Modes.first_free_buffer + MODES_MAG_BUFFERS - 1) % MODES_MAG_BUFFERS];
-    free_bufs = (Modes.first_filled_buffer - next_free_buffer + MODES_MAG_BUFFERS) % MODES_MAG_BUFFERS;
+    lastbuf = &Modes.mag_buffers[(Modes.first_free_buffer + Modes.mag_buf_num - 1) % Modes.mag_buf_num];
+    free_bufs = (Modes.first_filled_buffer - next_free_buffer + Modes.mag_buf_num) % Modes.mag_buf_num;
 
     // Paranoia! Unlikely, but let's go for belt and suspenders here
 
-    if (len != MODES_RTL_BUF_SIZE) {
-        fprintf(stderr, "weirdness: rtlsdr gave us a block with an unusual size (got %u bytes, expected %u bytes)\n",
-                (unsigned)len, (unsigned)MODES_RTL_BUF_SIZE);
+    if (len != Modes.sdr_buf_size) {
+       fprintf(stderr, "weirdness: sdr gave us a block with an unusual size (got %u bytes, expected %u bytes)\n",
+            (unsigned)len, (unsigned)Modes.sdr_buf_size);
 
-        if (len > MODES_RTL_BUF_SIZE) {
+        if (len > Modes.sdr_buf_size) {
             // wat?! Discard the start.
-            unsigned discard = (len - MODES_RTL_BUF_SIZE + 1) / 2;
+            unsigned discard = (len - Modes.sdr_buf_size + 1) / 2;
             outbuf->dropped += discard;
             buf += discard*2;
             len -= discard*2;
@@ -432,6 +576,7 @@ void rtlsdrCallback(unsigned char *buf, uint32_t len, void *ctx) {
 
     if (was_odd) {
         // Drop a sample so we are in sync with I/Q samples again (hopefully)
+        fprintf(stderr, "was_odd = %d\n", was_odd);
         ++buf;
         --len;
         ++outbuf->dropped;
@@ -440,7 +585,7 @@ void rtlsdrCallback(unsigned char *buf, uint32_t len, void *ctx) {
     was_odd = (len & 1);
     slen = len/2;
 
-    if (free_bufs == 0 || (dropping && free_bufs < MODES_MAG_BUFFERS/2)) {
+    if (free_bufs == 0 || (dropping && free_bufs < (unsigned)Modes.mag_buf_num/2)) {
         // FIFO is full. Drop this block.
         dropping = 1;
         outbuf->dropped += slen;
@@ -486,6 +631,93 @@ void rtlsdrCallback(unsigned char *buf, uint32_t len, void *ctx) {
     pthread_cond_signal(&Modes.data_cond);
     pthread_mutex_unlock(&Modes.data_mutex);
 }
+
+#ifdef HAVE_AIRSPY
+int airspyCallback(airspy_transfer *transfer) {
+	int16_t *inptr = (int16_t *)transfer->samples;
+	int16_t *outptr = (int16_t *)Modes.airspy_scratch;
+	size_t i_len = transfer->sample_count;
+	size_t i, i_done, o_done;
+    struct mag_buf *outbuf;
+    struct mag_buf *lastbuf;
+    uint32_t slen;
+    unsigned next_free_buffer;
+    unsigned free_bufs;
+    unsigned block_duration;
+    static int dropping = 0;
+
+    // Lock the data buffer variables before accessing them
+    pthread_mutex_lock(&Modes.data_mutex);
+    if (Modes.exit) {
+        airspy_stop_rx(Modes.airspy);  // ask our caller to stop
+    }
+
+    next_free_buffer = (Modes.first_free_buffer + 1) % Modes.mag_buf_num;
+    outbuf = &Modes.mag_buffers[Modes.first_free_buffer];
+    lastbuf = &Modes.mag_buffers[(Modes.first_free_buffer + Modes.mag_buf_num - 1) % Modes.mag_buf_num];
+    free_bufs = (Modes.first_filled_buffer - next_free_buffer + Modes.mag_buf_num) % Modes.mag_buf_num;
+
+    // Give the demodulater function what it expects
+    soxr_process(Modes.resampler, inptr, i_len, &i_done, outptr, MODES_ASPY_BUF_SIZE, &o_done);
+    for (i = 0; i < o_done; i++)
+        Modes.airspy_bytes[i] = (int8_t)(outptr[i] >> 4) + 127;
+
+    // The resampler often produces an odd sample count, no real value in tracking how often
+    if (o_done & 1)
+        o_done -= 1;
+
+    slen = o_done / 2;
+
+    if (free_bufs == 0 || (dropping && free_bufs < (unsigned)Modes.mag_buf_num / 2)) {
+        // FIFO is full. Drop this block.
+        dropping = 1;
+        outbuf->dropped += slen;
+        pthread_mutex_unlock(&Modes.data_mutex);
+        return 0;
+    }
+
+    dropping = 0;
+    pthread_mutex_unlock(&Modes.data_mutex);
+
+    // Compute the sample timestamp and system timestamp for the start of the block
+    outbuf->sampleTimestamp = (uint64_t)(lastbuf->sampleTimestamp + 12e6 * (lastbuf->length + outbuf->dropped) / Modes.sample_rate);
+    block_duration = (unsigned int)(1e9 * slen / Modes.sample_rate);
+
+    // Get the approx system time for the start of this block
+    clock_gettime(CLOCK_REALTIME, &outbuf->sysTimestamp);
+
+    outbuf->sysTimestamp.tv_nsec -= block_duration;
+    normalize_timespec(&outbuf->sysTimestamp);
+
+    // Copy trailing data from last block (or reset if not valid)
+    if (outbuf->dropped == 0 && lastbuf->length >= Modes.trailing_samples) {
+        memcpy(outbuf->data, lastbuf->data + lastbuf->length - Modes.trailing_samples, Modes.trailing_samples * sizeof(uint16_t));
+    } else {
+        memset(outbuf->data, 0, Modes.trailing_samples * sizeof(uint16_t));
+    }
+
+    // Convert the new data
+    outbuf->length = slen;
+    convert_samples(Modes.airspy_bytes, &outbuf->data[Modes.trailing_samples], slen, &outbuf->total_power);
+
+    // Push the new data to the demodulation thread
+    pthread_mutex_lock(&Modes.data_mutex);
+
+    Modes.mag_buffers[next_free_buffer].dropped = 0;
+    Modes.mag_buffers[next_free_buffer].length = 0;  // just in case
+    Modes.first_free_buffer = next_free_buffer;
+
+    // accumulate CPU while holding the mutex, and restart measurement
+    end_cpu_timing(&reader_thread_start, &Modes.reader_cpu_accumulator);
+    start_cpu_timing(&reader_thread_start);
+
+    pthread_cond_signal(&Modes.data_cond);
+    pthread_mutex_unlock(&Modes.data_mutex);
+
+	return (0);
+}
+#endif
+
 //
 //=========================================================================
 //
@@ -508,7 +740,7 @@ void readDataFromFile(void) {
         break;
     }
 
-    if (!(readbuf = malloc(MODES_MAG_BUF_SAMPLES * bytes_per_sample))) {
+    if (!(readbuf = malloc(MODES_RTL_MAG_BUF_SAMPLES * bytes_per_sample))) {
         fprintf(stderr, "failed to allocate read buffer\n");
         exit(1);
     }
@@ -523,7 +755,7 @@ void readDataFromFile(void) {
         unsigned next_free_buffer;
         unsigned slen;
 
-        next_free_buffer = (Modes.first_free_buffer + 1) % MODES_MAG_BUFFERS;
+        next_free_buffer = (Modes.first_free_buffer + 1) % MODES_RTL_MAG_BUFFERS;
         if (next_free_buffer == Modes.first_filled_buffer) {
             // no space for output yet
             pthread_cond_wait(&Modes.data_cond, &Modes.data_mutex);
@@ -531,7 +763,7 @@ void readDataFromFile(void) {
         }
 
         outbuf = &Modes.mag_buffers[Modes.first_free_buffer];
-        lastbuf = &Modes.mag_buffers[(Modes.first_free_buffer + MODES_MAG_BUFFERS - 1) % MODES_MAG_BUFFERS];
+        lastbuf = &Modes.mag_buffers[(Modes.first_free_buffer + MODES_RTL_MAG_BUFFERS - 1) % MODES_RTL_MAG_BUFFERS];
         pthread_mutex_unlock(&Modes.data_mutex);
 
         // Compute the sample timestamp and system timestamp for the start of the block
@@ -547,7 +779,7 @@ void readDataFromFile(void) {
         // Get the system time for the start of this block
         clock_gettime(CLOCK_REALTIME, &outbuf->sysTimestamp);
 
-        toread = MODES_MAG_BUF_SAMPLES * bytes_per_sample;
+        toread = MODES_RTL_MAG_BUF_SAMPLES * bytes_per_sample;
         r = readbuf;
         while (toread) {
             nread = read(Modes.fd, r, toread);
@@ -564,7 +796,7 @@ void readDataFromFile(void) {
             toread -= nread;
         }
 
-        slen = outbuf->length = MODES_MAG_BUF_SAMPLES - toread/bytes_per_sample;
+        slen = outbuf->length = MODES_RTL_MAG_BUF_SAMPLES - toread / bytes_per_sample;
 
         // Convert the new data
         convert_samples(readbuf, &outbuf->data[Modes.trailing_samples], slen, &outbuf->total_power);
@@ -610,27 +842,60 @@ void *readerThreadEntryPoint(void *arg) {
 
     if (Modes.filename == NULL) {
         while (!Modes.exit) {
-            rtlsdr_read_async(Modes.dev, rtlsdrCallback, NULL,
-                              MODES_RTL_BUFFERS,
-                              MODES_RTL_BUF_SIZE);
+			if (Modes.rtl_enabled) {  // rtlsdr
+				rtlsdr_read_async(Modes.dev, rtlsdrCallback, NULL,
+					MODES_RTL_BUFFERS,
+					Modes.sdr_buf_size);
 
-            if (!Modes.exit) {
-                log_with_timestamp("Warning: lost the connection to the RTLSDR device.");
-                rtlsdr_close(Modes.dev);
-                Modes.dev = NULL;
+				if (!Modes.exit) {
+					log_with_timestamp("Warning: lost the connection to the RTLSDR device.");
+					rtlsdr_close(Modes.dev);
+					Modes.dev = NULL;
 
-                do {
-                    sleep(5);
-                    log_with_timestamp("Trying to reconnect to the RTLSDR device..");
-                } while (!Modes.exit && modesInitRTLSDR() < 0);
-            }
+					do {
+						sleep(5);
+						log_with_timestamp("Trying to reconnect to the RTLSDR device..");
+					} while (!Modes.exit && modesInitRTLSDR() < 0);
+				}
+			}
+#ifdef HAVE_AIRSPY
+            else if (Modes.airspy_enabled) {  // airspy
+				airspy_start_rx(Modes.airspy, airspyCallback, NULL);
+
+                while ((airspy_is_streaming(Modes.airspy) == AIRSPY_TRUE) && (!Modes.exit)) {
+                    usleep(1000);  // 1 ms
+                }
+
+				if (!Modes.exit) {
+					log_with_timestamp("Warning: lost the connection to the airspy device.");
+					airspy_stop_rx(Modes.airspy);
+					airspy_close(Modes.airspy);
+					airspy_exit();
+					Modes.airspy = NULL;
+
+					do {
+						sleep(2);
+						log_with_timestamp("Trying to reconnect to the airspy device..");
+					} while (!Modes.exit && modesInitAirSpy() < 0);
+				}
+			}
+#endif
         }
 
         if (Modes.dev != NULL) {
             rtlsdr_close(Modes.dev);
             Modes.dev = NULL;
         }
-    } else {
+#ifdef HAVE_AIRSPY
+        else if (Modes.airspy != NULL) {
+            airspy_stop_rx(Modes.airspy);
+            airspy_close(Modes.airspy);
+            airspy_exit();
+            soxr_delete(Modes.resampler);
+            Modes.airspy = NULL;
+        }
+#endif
+    } else {   // file
         readDataFromFile();
     }
 
@@ -675,21 +940,42 @@ void showHelp(void) {
 "-----------------------------------------------------------------------------\n"
 "| dump1090 ModeS Receiver     %45s |\n"
 "-----------------------------------------------------------------------------\n"
-"--device-index <index>   Select RTL device (default: 0)\n"
-"--gain <db>              Set gain (default: max gain. Use -10 for auto-gain)\n"
+"Input to use (you must specify one):"
+"--dev-rtlsdr             use RTLSDR device.\n"
+#ifdef HAVE_AIRSPY
+"--dev-airspy             use AirSpy device.\n"
+#endif
+"--ifile <filename>       Read data from File (use '-' for stdin)\n"
+"--net-only               Enable just networking, no SDR device or file used\n"
+"RTL-SDR specific options:\n"
+"    --device-index <index>   Select SDR device (default: 0)\n"
+"    --rtl-gain <db>          Set gain (default: max gain)\n"
+"    --ppm <error>            Set receiver error in parts per million (default 0)\n"
+#ifdef HAVE_RTL_BIAST
+"    --enable-rtlsdr-biast    Set bias tee supply on (default off)\n"
+#endif
+#ifdef HAVE_AIRSPY
+"AIRSPY specific options:\n"
+"    --linearity-gain <n>     Set linearity simplified gain, 0-21\n"
+"    --sensitivity-gain <n>   Set sensitivity simplified gain, 0-21\n"
+"    --mixer-gain <n>         Set Mixer (RF) gain (0-15, default 8)\n"
+"    --vga-gain <n>           Set VGA (baseband) gain (0-15, default 5)\n"
+"    --lna-gain <n>           Set LNA (IF) gain (0-15, default 1)\n"
+"    --enable-airspy-biast    Set bias tee supply on (default off)\n"
+#endif
+"FILE specific options:\n"
+"    --iformat <format>       Sample format for input file: UC8 (default), SC16, or SC16Q11\n"
+"    --throttle               When reading from a file, play back in realtime, not at max speed\n"
+"Common options:\n"
 "--enable-agc             Enable the Automatic Gain Control (default: off)\n"
 "--freq <hz>              Set frequency (default: 1090 Mhz)\n"
-"--ifile <filename>       Read data from file (use '-' for stdin)\n"
-"--iformat <format>       Sample format for --ifile: UC8 (default), SC16, or SC16Q11\n"
-"--throttle               When reading from a file, play back in realtime, not at max speed\n"
-"--interactive            Interactive mode refreshing data on screen. Implies --throttle\n"
-"--interactive-rows <num> Max number of rows in interactive mode (default: 15)\n"
+"--interactive            Interactive mode refreshing data on screen (implies --throttle when using --file)\n"
+"--interactive-rows <num> Max number of rows in interactive mode (default: 22)\n"
 "--interactive-ttl <sec>  Remove from list if idle for <sec> (default: 60)\n"
 "--interactive-rtl1090    Display flight table in RTL1090 format\n"
 "--raw                    Show only messages hex values\n"
 "--net                    Enable networking\n"
 "--modeac                 Enable decoding of SSR Modes 3/A & 3/C\n"
-"--net-only               Enable just networking, no RTL device or file used\n"
 "--net-bind-address <ip>  IP address to bind to (default: Any; Use 127.0.0.1 for private)\n"
 #ifdef ENABLE_WEBSERVER
 "--net-http-port <ports>  HTTP server ports (default: 8080)\n"
@@ -714,8 +1000,8 @@ void showHelp(void) {
 #ifdef ALLOW_AGGRESSIVE
 "--aggressive             More CPU for more messages (two bits fixes, ...)\n"
 #endif
-"--mlat                   display raw messages in Beast ascii mode\n"
-"--stats                  With --ifile print stats at exit. No other output\n"
+"--mlat                   Display raw messages in Beast ascii mode\n"
+"--stats                  Print statistics at exit. No other output\n"
 "--stats-range            Collect/show range histogram\n"
 "--stats-every <seconds>  Show and reset stats every <seconds> seconds\n"
 "--onlyaddr               Show only ICAO addresses (testing purposes)\n"
@@ -725,7 +1011,6 @@ void showHelp(void) {
 "--debug <flags>          Debug mode (verbose), see README for details\n"
 "--quiet                  Disable output to stdout. Use for daemon applications\n"
 "--show-only <addr>       Show only messages from the given ICAO on stdout\n"
-"--ppm <error>            Set receiver error in parts per million (default 0)\n"
 "--html-dir <dir>         Use <dir> as base directory for the internal HTTP server. Defaults to " HTMLPATH "\n"
 "--write-json <dir>       Periodically write json output to <dir> (for serving by a separate webserver)\n"
 "--write-json-every <t>   Write json output every t seconds (default 1)\n"
@@ -936,16 +1221,43 @@ int main(int argc, char **argv) {
     for (j = 1; j < argc; j++) {
         int more = j+1 < argc; // There are more arguments
 
-        if (!strcmp(argv[j],"--device-index") && more) {
-            Modes.dev_name = strdup(argv[++j]);
-        } else if (!strcmp(argv[j],"--gain") && more) {
-            Modes.gain = (int) (atof(argv[++j])*10); // Gain is in tens of DBs
-        } else if (!strcmp(argv[j],"--enable-agc")) {
-            Modes.enable_agc++;
+		if (!strcmp(argv[j], "--device-index") && more) {
+			Modes.dev_name = strdup(argv[++j]);
+		} else if (!strcmp(argv[j], "--dev-rtlsdr")) {
+			Modes.prefer_rtlsdr = 1;
+		} else if (!strcmp(argv[j],"--rtl-gain") && more) {
+            Modes.rtl_gain = (int) (atof(argv[++j])*10); // Gain is in tens of DBs
+        } else if (!strcmp(argv[j], "--ppm") && more) {
+            Modes.ppm_error = atoi(argv[++j]);
+#ifdef HAVE_RTL_BIAST
+        } else if (!strcmp(argv[j], "--enable-rtlsdr-biast")) {
+            Modes.enable_rtlsdr_biast = 1;
+#endif
+#ifdef HAVE_AIRSPY
+        } else if (!strcmp(argv[j], "--dev-airspy")) {
+            Modes.prefer_airspy = 1;
+		} else if (!strcmp(argv[j], "--enable-airspy-biast")) {
+			Modes.enable_airspy_biast = 1;
+		} else if (!strcmp(argv[j], "--linearity-gain")) {
+			Modes.linearity_gain = atoi(argv[++j]);
+			Modes.enable_linearity = 1;
+		} else if (!strcmp(argv[j], "--sensitivity-gain")) {
+			Modes.sensitivity_gain = atoi(argv[++j]);
+			Modes.enable_sensitivity = 1;
+		} else if (!strcmp(argv[j], "--mixer-gain")) {
+			Modes.mixer_gain = atoi(argv[++j]);
+		} else if (!strcmp(argv[j], "--lna-gain")) {
+			Modes.lna_gain = atoi(argv[++j]);
+		} else if (!strcmp(argv[j], "--vga-gain")) {
+			Modes.vga_gain = atoi(argv[++j]);
+#endif
+        } else if (!strcmp(argv[j], "--enable-agc")) {
+            Modes.enable_agc = 1;
         } else if (!strcmp(argv[j],"--freq") && more) {
             Modes.freq = (int) strtoll(argv[++j],NULL,10);
         } else if (!strcmp(argv[j],"--ifile") && more) {
             Modes.filename = strdup(argv[++j]);
+            Modes.prefer_file = 1;
         } else if (!strcmp(argv[j],"--iformat") && more) {
             ++j;
             if (!strcasecmp(argv[j], "uc8")) {
@@ -1080,8 +1392,6 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[j],"--help")) {
             showHelp();
             exit(0);
-        } else if (!strcmp(argv[j],"--ppm") && more) {
-            Modes.ppm_error = atoi(argv[++j]);
         } else if (!strcmp(argv[j],"--quiet")) {
             Modes.quiet = 1;
         } else if (!strcmp(argv[j],"--show-only") && more) {
@@ -1112,6 +1422,55 @@ int main(int argc, char **argv) {
         }
     }
 
+    if ((Modes.prefer_airspy + Modes.prefer_rtlsdr + Modes.prefer_file + Modes.net_only) == 0) {
+		showHelp();
+		fprintf(stderr,
+			"\n\nError: you must specify either "
+#ifdef HAVE_AIRSPY
+            "--dev-airspy, "
+#endif
+            "--dev-rtlsdr, --file, or --net-only.\n");
+		exit(1);
+	}
+
+    if ((Modes.prefer_airspy + Modes.prefer_rtlsdr + Modes.prefer_file + Modes.net_only) > 1) {
+        showHelp();
+        fprintf(stderr,
+            "\n\nError: only one of "
+#ifdef HAVE_AIRSPY
+            "--dev-airspy, "
+#endif
+            "--dev-rtlsdr, --file, and --net-only may be specified.\n");
+        exit(1);
+    }
+
+#ifdef HAVE_AIRSPY
+    if (Modes.prefer_airspy) {
+        if ((Modes.enable_linearity + Modes.enable_sensitivity) > 1) {
+            showHelp();
+            fprintf(stderr,
+                "\n\nError: --linearity-gain and --sensitivity-gain are mutually exclusive.\n");
+            exit(1);
+        }
+
+        if (((Modes.enable_linearity + Modes.enable_sensitivity) > 0) && Modes.enable_agc) {
+            showHelp();
+            fprintf(stderr,
+                "\n\nError: --linearity-gain and --sensitivity-gain cannot be used with --enable-agc.\n");
+            exit(1);
+        }
+    }
+#endif
+
+    if (Modes.prefer_rtlsdr) {
+        if ((Modes.rtl_gain != MODES_MAX_RTL_GAIN) && Modes.enable_agc) {
+            showHelp();
+            fprintf(stderr,
+                "\n\nError: --rtl-gain cannot be used with --enable-agc.\n");
+            exit(1);
+        }
+    }
+
 #ifndef _WIN32
     // Setup for SIGWINCH for handling lines
     if (Modes.interactive) {signal(SIGWINCH, sigWinchCallback);}
@@ -1122,11 +1481,16 @@ int main(int argc, char **argv) {
     modesInit();
 
     if (Modes.net_only) {
-        fprintf(stderr,"Net-only mode, no RTL device or file open.\n");
+        fprintf(stderr,"Net-only mode, no SDR device or file open.\n");
     } else if (Modes.filename == NULL) {
-        if (modesInitRTLSDR() < 0) {
-            exit(1);
-        }
+		if (Modes.prefer_rtlsdr == 1 && modesInitRTLSDR() < 0) {
+			exit(1);
+		} 
+#ifdef HAVE_AIRSPY        
+        else if (Modes.prefer_airspy == 1 && modesInitAirSpy() < 0) {
+			exit(1);
+		}
+#endif
     } else {
         if (Modes.filename[0] == '-' && Modes.filename[1] == '\0') {
             Modes.fd = STDIN_FILENO;
@@ -1225,7 +1589,7 @@ int main(int argc, char **argv) {
 
                 // Mark the buffer we just processed as completed.
                 pthread_mutex_lock(&Modes.data_mutex);
-                Modes.first_filled_buffer = (Modes.first_filled_buffer + 1) % MODES_MAG_BUFFERS;
+                Modes.first_filled_buffer = (Modes.first_filled_buffer + 1) % Modes.mag_buf_num;
                 pthread_cond_signal(&Modes.data_cond);
                 pthread_mutex_unlock(&Modes.data_mutex);
                 watchdogCounter = 10;
