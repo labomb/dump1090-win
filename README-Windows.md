@@ -94,6 +94,6 @@ Now open Windows/dump1090-win.sln with Visual Studio, choose 'Release', and then
  
 # Bug reports, feedback, etc...
 
-Please use the [github issues page](https://github.com/labomb/dump1090/issues) to report any problems.
+Please use the [github issues page](https://github.com/labomb/dump1090-win/issues) to report any problems.
 Or feel free to [email me](mailto:labomb@rochester.rr.com).
 
