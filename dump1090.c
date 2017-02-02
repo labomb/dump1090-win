@@ -1429,7 +1429,7 @@ int main(int argc, char **argv) {
 #ifdef HAVE_AIRSPY
             "--dev-airspy, "
 #endif
-            "--dev-rtlsdr, --file, or --net-only.\n");
+            "--dev-rtlsdr, --ifile, or --net-only.\n");
 		exit(1);
 	}
 
@@ -1440,7 +1440,7 @@ int main(int argc, char **argv) {
 #ifdef HAVE_AIRSPY
             "--dev-airspy, "
 #endif
-            "--dev-rtlsdr, --file, and --net-only may be specified.\n");
+            "--dev-rtlsdr, --ifile, and --net-only may be specified.\n");
         exit(1);
     }
 

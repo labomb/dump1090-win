@@ -90,7 +90,7 @@ Now open Windows/dump1090-win.sln with Visual Studio, choose 'Release', and then
  
  
  >**Note about Bias-t support for RTL-SDR.com V3 dongles:**
- If you wish to enable bias-t support, you must insure that you are building with a version of rtlsdr.lib that supports this capability. You can find suitable source package [here](https://github.com/rtlsdrblog/rtl_biast) and [here](https://github.com/librtlsdr/librtlsdr/tree/master/src), and binary distributions [here](https://github.com/rtlsdrblog/rtl-sdr/releases/tag/v1.1) and [here](https://github.com/librtlsdr/librtlsdr/releases/tag/v0.7.0).
+ If you wish to enable bias-t support, you must insure that you are building with a version of rtlsdr.lib that supports this capability. You can find suitable source packages [here](https://github.com/rtlsdrblog/rtl_biast) and [here](https://github.com/librtlsdr/librtlsdr/tree/master/src), and binary distributions [here](https://github.com/rtlsdrblog/rtl-sdr/releases/tag/v1.1) and [here](https://github.com/librtlsdr/librtlsdr/releases/tag/v0.7.0).
  
 # Bug reports, feedback, etc...
 
