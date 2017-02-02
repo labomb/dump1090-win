@@ -5,7 +5,7 @@ that adds new functionality and is designed to be built as
 a Debian/Raspbian package.
 
 Please see README-Windows.md for details on building this package on Windows. For details on building with
-Airspy support, please see README-Airspy.md.
+Airspy support, please see README-Airspy.md. For detail on Bias-t support, see note below.
 
 This version is licensed under the GPL (v2 or later).
 See the file COPYING for details.
@@ -169,3 +169,7 @@ EXTRAPACKAGES="eatmydata debhelper fakeroot"
 ALLOWUNTRUSTED="no"
 APTKEYRINGS=("/home/oliver/ppa/mutability.gpg")
 ````
+ 
+ 
+>**Note about Bias-t support:**
+ Bias-t support is available for RTL-SDR.com V3 dongles. If you wish to enable bias-t support, you must insure that you are building this package with a version of librtlsdr that supports this capability. You can find suitable source packages [here](https://github.com/rtlsdrblog/rtl_biast) and [here](https://github.com/librtlsdr/librtlsdr/tree/master/src). To enable the necessary support code when building, be sure to include preprocessor define macro HAVE_RTL_BIAST. 
