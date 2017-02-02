@@ -1,6 +1,6 @@
 # dump1090-mutability with Windows and Airspy support
 
-This package is based on mutability's version of dump109. It can be built with Visual Studio on Windows (and perhaps other Windows development environments as well), provides optional support for Airspy devices, and optional bias-t support for RTL-SDR.com V3 dongles.
+This package is based on mutability's version of dump1090. It can be built with Visual Studio on Windows (and perhaps other Windows development environments as well), provides optional support for Airspy devices, and optional bias-t support for RTL-SDR.com V3 dongles.
 
 For deatils on functionality/enhancements of the mutability fork of dump1090, please see README.md. Please see README-Windows.md for details on building this package on Windows.
 
