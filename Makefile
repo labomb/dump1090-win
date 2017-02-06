@@ -5,7 +5,7 @@
 PROGNAME=dump1090
 
 ifndef DUMP1090_VERSION
-DUMP1090_VERSION=$(shell git describe --tags --match=v*)
+DUMP1090_VERSION=$(shell git describe --always --tags --match=v*)
 endif
 
 ifdef PREFIX
@@ -16,8 +16,15 @@ endif
 
 CPPFLAGS+=-DMODES_DUMP1090_VERSION=\"$(DUMP1090_VERSION)\"
 CFLAGS+=-O2 -g -Wall -Werror -W
-LIBS=-lpthread -lm
+LIBS+=-lpthread -lm
+
+CFLAGS_RTL=`pkg-config --cflags librtlsdr libusb-1.0`
 LIBS_RTL=`pkg-config --libs librtlsdr libusb-1.0`
+
+CPPFLAGS_AIRSPY=-DHAVE_AIRSPY -I/usr/local/include/libairspy
+CFLAGS_AIRSPY=`pkg-config --cflags libairspy soxr`
+LIBS_AIRSPY=`pkg-config --libs libairspy soxr`
+
 CC=gcc
 
 UNAME := $(shell uname)
@@ -43,24 +50,34 @@ CFLAGS+= -DMISSING_NANOSLEEP
 COMPAT+= compat/clock_nanosleep/clock_nanosleep.o
 endif
 
+DUMP1090_SRC=dump1090.c anet.c interactive.c mode_ac.c mode_s.c net_io.c crc.c demod_2400.c stats.c cpr.c icao_filter.c track.c util.c convert.c
+DUMP1090_OBJ=$(DUMP1090_SRC:.c=.o)
+VIEW1090_SRC=view1090.c anet.c interactive.c mode_ac.c mode_s.c net_io.c crc.c stats.c cpr.c icao_filter.c track.c util.c
+VIEW1090_OBJ=$(VIEW1090_SRC:.c=.o)
+FAUP1090_SRC=faup1090.c anet.c mode_ac.c mode_s.c net_io.c crc.c stats.c cpr.c icao_filter.c track.c util.c
+FAUP1090_OBJ=$(FAUP1090_SRC:.c=.o)
+
 all: dump1090 view1090
 
 %.o: %.c *.h
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(EXTRACFLAGS) -c $< -o $@
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(CFLAGS_RTL) $(EXTRACFLAGS) -c $< -o $@
 
-dump1090.o: CFLAGS += `pkg-config --cflags librtlsdr`
-
-dump1090: dump1090.o anet.o interactive.o mode_ac.o mode_s.o net_io.o crc.o demod_2400.o stats.o cpr.o icao_filter.o track.o util.o convert.o $(COMPAT)
+dump1090: $(DUMP1090_OBJ) $(COMPAT)
 	$(CC) -g -o $@ $^ $(LIBS) $(LIBS_RTL) $(LDFLAGS)
 
-view1090: view1090.o anet.o interactive.o mode_ac.o mode_s.o net_io.o crc.o stats.o cpr.o icao_filter.o track.o util.o $(COMPAT)
+dump1090-airspy: CPPFLAGS += $(CPPFLAGS_AIRSPY)
+dump1090-airspy: CFLAGS += $(CFLAGS_AIRSPY)
+dump1090-airspy: $(DUMP1090_OBJ) $(COMPAT)
+	$(CC) -g -o $@ $^ $(LIBS) $(LIBS_RTL) $(LIBS_AIRSPY) $(LDFLAGS)
+
+view1090: $(VIEW1090_OBJ) $(COMPAT)
 	$(CC) -g -o $@ $^ $(LIBS) $(LDFLAGS)
 
-faup1090: faup1090.o anet.o mode_ac.o mode_s.o net_io.o crc.o stats.o cpr.o icao_filter.o track.o util.o $(COMPAT)
+faup1090: $(FAUP1090_OBJ) $(COMPAT)
 	$(CC) -g -o $@ $^ $(LIBS) $(LDFLAGS)
 
 clean:
-	rm -f *.o compat/clock_gettime/*.o compat/clock_nanosleep/*.o dump1090 view1090 faup1090 cprtests crctests
+	rm -f *.o compat/clock_gettime/*.o compat/clock_nanosleep/*.o dump1090 dump1090-airspy view1090 faup1090 cprtests crctests
 
 test: cprtests
 	./cprtests
