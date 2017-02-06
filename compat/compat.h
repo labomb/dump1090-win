@@ -36,4 +36,19 @@
 #include "clock_gettime/clock_gettime.h"
 #endif
 
+inline void cls() {
+#ifndef _WIN32
+    printf("\x1b[H\x1b[2J");
+#else
+    HANDLE hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
+    COORD coord = { 0, 0 };
+    DWORD count;
+
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    GetConsoleScreenBufferInfo(hStdOut, &csbi);
+    FillConsoleOutputCharacter(hStdOut, ' ', csbi.dwSize.X * csbi.dwSize.Y, coord, &count);
+    SetConsoleCursorPosition(hStdOut, coord);
+#endif
+}
+
 #endif //COMPAT_UTIL_H

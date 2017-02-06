@@ -74,20 +74,6 @@ _inline double trunc(double d) { return (d>0) ? floor(d) : ceil(d); }
 #define snprintf  _snprintf
 #define vsnprintf _vsnprintf
 #define realpath(N,R) _fullpath((R),(N),_MAX_PATH)
-
-_inline void cls() {
-    HANDLE hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
-    COORD coord = {0, 0};
-    DWORD count;
-
-    CONSOLE_SCREEN_BUFFER_INFO csbi;
-    GetConsoleScreenBufferInfo(hStdOut, &csbi);
-
-    FillConsoleOutputCharacter(hStdOut, ' ', csbi.dwSize.X * csbi.dwSize.Y, coord, &count);
-
-    SetConsoleCursorPosition(hStdOut, coord);
-}
-
 #define strcasecmp _stricmp
 #define strncasecmp _strnicmp
 

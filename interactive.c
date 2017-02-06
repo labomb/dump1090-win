@@ -90,11 +90,7 @@ void interactiveShowData(void) {
 
     progress = spinner[(now/1000)%4];
 
-#ifndef _WIN32
-    printf("\x1b[H\x1b[2J");    // Clear the screen
-#else
-    cls();
-#endif
+    cls();      // Clear the screen
 
     if (Modes.interactive_rtl1090 == 0) {
         printf (
