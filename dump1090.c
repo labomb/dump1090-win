@@ -450,7 +450,6 @@ int modesInitAirSpy(void) {
     // Configure the resampler using the airspy sample rate and the sample rate the demodulator expects
     Modes.resampler = soxr_create(samplerates[0], Modes.sample_rate, 2, &sox_err, &ios, &qts, &rts);
     if (sox_err) {
-        int e = errno;
         fprintf(stderr, "soxr_create: %s; %s\n", soxr_strerror(sox_err), strerror(errno));
         return -1;
     }
