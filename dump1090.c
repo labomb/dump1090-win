@@ -739,7 +739,7 @@ void readDataFromFile(void) {
         break;
     }
 
-    if (!(readbuf = malloc(MODES_RTL_MAG_BUF_SAMPLES * bytes_per_sample))) {
+    if (!(readbuf = malloc(Modes.mag_buf_samples * bytes_per_sample))) {
         fprintf(stderr, "failed to allocate read buffer\n");
         exit(1);
     }
@@ -754,7 +754,7 @@ void readDataFromFile(void) {
         unsigned next_free_buffer;
         unsigned slen;
 
-        next_free_buffer = (Modes.first_free_buffer + 1) % MODES_RTL_MAG_BUFFERS;
+        next_free_buffer = (Modes.first_free_buffer + 1) % Modes.mag_buf_num;
         if (next_free_buffer == Modes.first_filled_buffer) {
             // no space for output yet
             pthread_cond_wait(&Modes.data_cond, &Modes.data_mutex);
@@ -762,7 +762,7 @@ void readDataFromFile(void) {
         }
 
         outbuf = &Modes.mag_buffers[Modes.first_free_buffer];
-        lastbuf = &Modes.mag_buffers[(Modes.first_free_buffer + MODES_RTL_MAG_BUFFERS - 1) % MODES_RTL_MAG_BUFFERS];
+        lastbuf = &Modes.mag_buffers[(Modes.first_free_buffer + Modes.mag_buf_num - 1) % Modes.mag_buf_num];
         pthread_mutex_unlock(&Modes.data_mutex);
 
         // Compute the sample timestamp and system timestamp for the start of the block
@@ -778,7 +778,7 @@ void readDataFromFile(void) {
         // Get the system time for the start of this block
         clock_gettime(CLOCK_REALTIME, &outbuf->sysTimestamp);
 
-        toread = MODES_RTL_MAG_BUF_SAMPLES * bytes_per_sample;
+        toread = Modes.mag_buf_samples * bytes_per_sample;
         r = readbuf;
         while (toread) {
             nread = read(Modes.fd, r, toread);
@@ -795,7 +795,7 @@ void readDataFromFile(void) {
             toread -= nread;
         }
 
-        slen = outbuf->length = MODES_RTL_MAG_BUF_SAMPLES - toread / bytes_per_sample;
+        slen = outbuf->length = Modes.mag_buf_samples - toread / bytes_per_sample;
 
         // Convert the new data
         convert_samples(readbuf, &outbuf->data[Modes.trailing_samples], slen, &outbuf->total_power);
@@ -841,43 +841,43 @@ void *readerThreadEntryPoint(void *arg) {
 
     if (Modes.filename == NULL) {
         while (!Modes.exit) {
-			if (Modes.rtl_enabled) {  // rtlsdr
-				rtlsdr_read_async(Modes.dev, rtlsdrCallback, NULL,
-					MODES_RTL_BUFFERS,
-					Modes.sdr_buf_size);
+            if (Modes.rtl_enabled) {  // rtlsdr
+                rtlsdr_read_async(Modes.dev, rtlsdrCallback, NULL,
+                    MODES_RTL_BUFFERS,
+                    Modes.sdr_buf_size);
 
-				if (!Modes.exit) {
-					log_with_timestamp("Warning: lost the connection to the RTLSDR device.");
-					rtlsdr_close(Modes.dev);
-					Modes.dev = NULL;
+                if (!Modes.exit) {
+                    log_with_timestamp("Warning: lost the connection to the RTLSDR device.");
+                    rtlsdr_close(Modes.dev);
+                    Modes.dev = NULL;
 
-					do {
-						sleep(5);
-						log_with_timestamp("Trying to reconnect to the RTLSDR device..");
-					} while (!Modes.exit && modesInitRTLSDR() < 0);
-				}
-			}
+                    do {
+                        sleep(5);
+                        log_with_timestamp("Trying to reconnect to the RTLSDR device..");
+                    } while (!Modes.exit && modesInitRTLSDR() < 0);
+                }
+            }
 #ifdef HAVE_AIRSPY
             else if (Modes.airspy_enabled) {  // airspy
-				airspy_start_rx(Modes.airspy, airspyCallback, NULL);
+                airspy_start_rx(Modes.airspy, airspyCallback, NULL);
 
                 while ((airspy_is_streaming(Modes.airspy) == AIRSPY_TRUE) && (!Modes.exit)) {
                     usleep(1000);  // 1 ms
                 }
 
-				if (!Modes.exit) {
-					log_with_timestamp("Warning: lost the connection to the airspy device.");
-					airspy_stop_rx(Modes.airspy);
-					airspy_close(Modes.airspy);
-					airspy_exit();
-					Modes.airspy = NULL;
+                if (!Modes.exit) {
+                    log_with_timestamp("Warning: lost the connection to the airspy device.");
+                    airspy_stop_rx(Modes.airspy);
+                    airspy_close(Modes.airspy);
+                    airspy_exit();
+                    Modes.airspy = NULL;
 
-					do {
-						sleep(2);
-						log_with_timestamp("Trying to reconnect to the airspy device..");
-					} while (!Modes.exit && modesInitAirSpy() < 0);
-				}
-			}
+                    do {
+                        sleep(2);
+                        log_with_timestamp("Trying to reconnect to the airspy device..");
+                    } while (!Modes.exit && modesInitAirSpy() < 0);
+                }
+            }
 #endif
         }
 
@@ -1222,9 +1222,9 @@ int main(int argc, char **argv) {
 
 		if (!strcmp(argv[j], "--device-index") && more) {
 			Modes.dev_name = strdup(argv[++j]);
-		} else if (!strcmp(argv[j], "--dev-rtlsdr")) {
-			Modes.prefer_rtlsdr = 1;
-		} else if (!strcmp(argv[j],"--rtl-gain") && more) {
+        } else if (!strcmp(argv[j], "--dev-rtlsdr")) {
+            Modes.prefer_rtlsdr = 1;
+        } else if (!strcmp(argv[j],"--rtl-gain") && more) {
             Modes.rtl_gain = (int) (atof(argv[++j])*10); // Gain is in tens of DBs
         } else if (!strcmp(argv[j], "--ppm") && more) {
             Modes.ppm_error = atoi(argv[++j]);
@@ -1235,20 +1235,20 @@ int main(int argc, char **argv) {
 #ifdef HAVE_AIRSPY
         } else if (!strcmp(argv[j], "--dev-airspy")) {
             Modes.prefer_airspy = 1;
-		} else if (!strcmp(argv[j], "--enable-airspy-biast")) {
-			Modes.enable_airspy_biast = 1;
-		} else if (!strcmp(argv[j], "--linearity-gain")) {
-			Modes.linearity_gain = atoi(argv[++j]);
-			Modes.enable_linearity = 1;
-		} else if (!strcmp(argv[j], "--sensitivity-gain")) {
-			Modes.sensitivity_gain = atoi(argv[++j]);
-			Modes.enable_sensitivity = 1;
-		} else if (!strcmp(argv[j], "--mixer-gain")) {
-			Modes.mixer_gain = atoi(argv[++j]);
-		} else if (!strcmp(argv[j], "--lna-gain")) {
-			Modes.lna_gain = atoi(argv[++j]);
-		} else if (!strcmp(argv[j], "--vga-gain")) {
-			Modes.vga_gain = atoi(argv[++j]);
+        } else if (!strcmp(argv[j], "--enable-airspy-biast")) {
+            Modes.enable_airspy_biast = 1;
+        } else if (!strcmp(argv[j], "--linearity-gain")) {
+            Modes.linearity_gain = atoi(argv[++j]);
+            Modes.enable_linearity = 1;
+        } else if (!strcmp(argv[j], "--sensitivity-gain")) {
+            Modes.sensitivity_gain = atoi(argv[++j]);
+            Modes.enable_sensitivity = 1;
+        } else if (!strcmp(argv[j], "--mixer-gain")) {
+            Modes.mixer_gain = atoi(argv[++j]);
+        } else if (!strcmp(argv[j], "--lna-gain")) {
+            Modes.lna_gain = atoi(argv[++j]);
+        } else if (!strcmp(argv[j], "--vga-gain")) {
+            Modes.vga_gain = atoi(argv[++j]);
 #endif
         } else if (!strcmp(argv[j], "--enable-agc")) {
             Modes.enable_agc = 1;
@@ -1422,15 +1422,15 @@ int main(int argc, char **argv) {
     }
 
     if ((Modes.prefer_airspy + Modes.prefer_rtlsdr + Modes.prefer_file + Modes.net_only) == 0) {
-		showHelp();
-		fprintf(stderr,
-			"\n\nError: you must specify either "
+        showHelp();
+        fprintf(stderr,
+            "\n\nError: you must specify either "
 #ifdef HAVE_AIRSPY
             "--dev-airspy, "
 #endif
             "--dev-rtlsdr, --ifile, or --net-only.\n");
-		exit(1);
-	}
+        exit(1);
+    }
 
     if ((Modes.prefer_airspy + Modes.prefer_rtlsdr + Modes.prefer_file + Modes.net_only) > 1) {
         showHelp();
@@ -1482,13 +1482,13 @@ int main(int argc, char **argv) {
     if (Modes.net_only) {
         fprintf(stderr,"Net-only mode, no SDR device or file open.\n");
     } else if (Modes.filename == NULL) {
-		if (Modes.prefer_rtlsdr == 1 && modesInitRTLSDR() < 0) {
-			exit(1);
-		} 
+        if (Modes.prefer_rtlsdr == 1 && modesInitRTLSDR() < 0) {
+            exit(1);
+        }
 #ifdef HAVE_AIRSPY        
         else if (Modes.prefer_airspy == 1 && modesInitAirSpy() < 0) {
-			exit(1);
-		}
+            exit(1);
+        }
 #endif
     } else {
         if (Modes.filename[0] == '-' && Modes.filename[1] == '\0') {
