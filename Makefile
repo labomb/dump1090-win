@@ -63,7 +63,7 @@ dump1090: $(DUMP1090_OBJ) $(COMPAT)
 	$(CC) -g -o $@ $^ $(LIBS) $(LIBS_RTL) $(LDFLAGS)
 
 dump1090-airspy: CPPFLAGS += $(CPPFLAGS_AIRSPY)
-dump1090-airspy: CFLAGS += $(CFLAGS_AIRSPY)
+dump1090-airspy: CFLAGS_RTL += $(CFLAGS_AIRSPY)
 dump1090-airspy: $(DUMP1090_OBJ) $(COMPAT)
 	$(CC) -g -o $@ $^ $(LIBS) $(LIBS_RTL) $(LIBS_AIRSPY) $(LDFLAGS)
 
