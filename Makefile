@@ -21,7 +21,7 @@ LIBS+=-lpthread -lm
 CFLAGS_RTL=`pkg-config --cflags librtlsdr libusb-1.0`
 LIBS_RTL=`pkg-config --libs librtlsdr libusb-1.0`
 
-CPPFLAGS_AIRSPY=-DHAVE_AIRSPY -I/usr/local/include/libairspy
+CPPFLAGS_AIRSPY=-DHAVE_AIRSPY
 CFLAGS_AIRSPY=`pkg-config --cflags libairspy soxr`
 LIBS_AIRSPY=`pkg-config --libs libairspy soxr`
 
@@ -50,12 +50,9 @@ CFLAGS+= -DMISSING_NANOSLEEP
 COMPAT+= compat/clock_nanosleep/clock_nanosleep.o
 endif
 
-DUMP1090_SRC=dump1090.c anet.c interactive.c mode_ac.c mode_s.c net_io.c crc.c demod_2400.c stats.c cpr.c icao_filter.c track.c util.c convert.c
-DUMP1090_OBJ=$(DUMP1090_SRC:.c=.o)
-VIEW1090_SRC=view1090.c anet.c interactive.c mode_ac.c mode_s.c net_io.c crc.c stats.c cpr.c icao_filter.c track.c util.c
-VIEW1090_OBJ=$(VIEW1090_SRC:.c=.o)
-FAUP1090_SRC=faup1090.c anet.c mode_ac.c mode_s.c net_io.c crc.c stats.c cpr.c icao_filter.c track.c util.c
-FAUP1090_OBJ=$(FAUP1090_SRC:.c=.o)
+DUMP1090_OBJ=dump1090.o anet.o interactive.o mode_ac.o mode_s.o net_io.o crc.o demod_2400.o stats.o cpr.o icao_filter.o track.o util.o convert.o
+VIEW1090_OBJ=view1090.o anet.o interactive.o mode_ac.o mode_s.o net_io.o crc.o stats.o cpr.o icao_filter.o track.o util.o
+FAUP1090_OBJ=faup1090.o anet.o mode_ac.o mode_s.o net_io.o crc.o stats.o cpr.o icao_filter.o track.o util.o
 
 all: dump1090 view1090
 
