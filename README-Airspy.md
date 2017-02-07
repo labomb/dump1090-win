@@ -9,24 +9,30 @@ See the file COPYING for details.
 
 # Building with Airspy support (Unix variants)
 
-To enable support for Airspy devices, you will also need the airspy and sox resampler libs when building the dump1090 package.
+To enable support for Airspy devices, you will need the airspy and sox resampler libs (in addition to the rtlsdr and usb-1.0 libraries) when building the dump1090 package.
 
 You will likely need to build and install libairspy from source... it can be found [here](https://github.com/airspy/host).
 
-You may be able to simply do the following to get the libsoxr library:
+You may be able to simply do something like the following to get the libsoxr lib and development files:
 
 ````
 $ sudo apt-get install libsoxr-dev
 ````
 
-If that doesn't work on your distribution, then you will need to build and install it from the source found [here](https://sourceforge.net/projects/soxr/files/).
+If that (or the equivalent for your distribution) doesn't work, then you will need to build and install it from the source found [here](https://sourceforge.net/projects/soxr/files/).
 
-To include the necessary Airspy support code when building, be sure to include preprocessor define macro HAVE_AIRSPY. 
+Once the airspy and soxr libs are installed, you can simply do this:
+
+````
+$ make dump1090-airspy
+````
+
+If using another approach to build this package, be sure to include preprocessor define macro HAVE_AIRSPY.
 
 For details on usage after building, do this:
 
 ````
-$ dump1090 --help
+$ dump1090-airspy --help
 ````
 
  
