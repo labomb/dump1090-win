@@ -941,9 +941,9 @@ void showHelp(void) {
 "| dump1090 ModeS Receiver     %45s |\n"
 "-----------------------------------------------------------------------------\n"
 "Input to use (you must specify one):"
-"--dev-rtlsdr             use RTLSDR device.\n"
+"--rtlsdr                 use RTLSDR device\n"
 #ifdef HAVE_AIRSPY
-"--dev-airspy             use AirSpy device.\n"
+"--airspy                 use AirSpy device\n"
 #endif
 "--ifile <filename>       Read data from File (use '-' for stdin)\n"
 "--net-only               Enable just networking, no SDR device or file used\n"
@@ -1223,7 +1223,7 @@ int main(int argc, char **argv) {
 
 		if (!strcmp(argv[j], "--device-index") && more) {
 			Modes.dev_name = strdup(argv[++j]);
-        } else if (!strcmp(argv[j], "--dev-rtlsdr")) {
+        } else if (!strcmp(argv[j], "--rtlsdr")) {
             Modes.prefer_rtlsdr = 1;
         } else if (!strcmp(argv[j],"--rtl-gain") && more) {
             Modes.rtl_gain = (int) (atof(argv[++j])*10); // Gain is in tens of DBs
@@ -1234,7 +1234,7 @@ int main(int argc, char **argv) {
             Modes.enable_rtlsdr_biast = 1;
 #endif
 #ifdef HAVE_AIRSPY
-        } else if (!strcmp(argv[j], "--dev-airspy")) {
+        } else if (!strcmp(argv[j], "--airspy")) {
             Modes.prefer_airspy = 1;
         } else if (!strcmp(argv[j], "--enable-airspy-biast")) {
             Modes.enable_airspy_biast = 1;
@@ -1427,9 +1427,9 @@ int main(int argc, char **argv) {
         fprintf(stderr,
             "\n\nError: you must specify either "
 #ifdef HAVE_AIRSPY
-            "--dev-airspy, "
+            "--airspy, "
 #endif
-            "--dev-rtlsdr, --ifile, or --net-only.\n");
+            "--rtlsdr, --ifile, or --net-only.\n");
         exit(1);
     }
 
@@ -1438,9 +1438,9 @@ int main(int argc, char **argv) {
         fprintf(stderr,
             "\n\nError: only one of "
 #ifdef HAVE_AIRSPY
-            "--dev-airspy, "
+            "--airspy, "
 #endif
-            "--dev-rtlsdr, --ifile, and --net-only may be specified.\n");
+            "--rtlsdr, --ifile, and --net-only may be specified.\n");
         exit(1);
     }
 
