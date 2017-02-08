@@ -310,7 +310,7 @@ struct {                             // Internal state
     int           prefer_file;       // File input
     int           net_only;          // Enable just networking
     // RTLSDR specific
-	int           rtl_enabled;
+    int           rtl_enabled;
     char         *dev_name;
     int           rtl_gain;
     rtlsdr_dev_t *dev;
