@@ -94,7 +94,8 @@ typedef struct rtlsdr_dev rtlsdr_dev_t;
 
 /* RTLSDR defaults */
 #define MODES_DEFAULT_PPM          0                          // Parts per million offset
-#define MODES_MAX_RTL_GAIN         999999                     // Use max available gain
+#define MODES_AUTO_GAIN            -100                       // Use automatic gain
+#define MODES_RTL_MAX_GAIN         999999                     // Use max available gain
 #define MODES_RTL_BUFFERS          15                         // Number of RTL buffers
 #define MODES_RTL_BUF_SIZE         (16*16384)                 // 256k
 #define MODES_RTL_MAG_BUF_SAMPLES  (MODES_RTL_BUF_SIZE / 2)   // Each sample is 2 bytes

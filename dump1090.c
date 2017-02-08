@@ -142,7 +142,7 @@ void modesInitConfig(void) {
     memset(&Modes, 0, sizeof(Modes));
 
     // Now initialise things that should not be 0/NULL to their defaults
-    Modes.rtl_gain                = MODES_MAX_RTL_GAIN;
+    Modes.rtl_gain                = MODES_RTL_MAX_GAIN;
 #ifdef HAVE_AIRSPY
     Modes.mixer_gain              = AIRSPY_MIXER_GAIN;
     Modes.lna_gain                = AIRSPY_LNA_GAIN;
@@ -303,7 +303,7 @@ int modesInitRTLSDR(void) {
     char vendor[256], product[256], serial[256];
 
     if (Modes.dev_name) {
-        if ( (dev_index = verbose_device_search(Modes.dev_name)) < 0 )
+        if ((dev_index = verbose_device_search(Modes.dev_name)) < 0)
             return -1;
     }
 
@@ -319,7 +319,7 @@ int modesInitRTLSDR(void) {
             fprintf(stderr, "%d: unable to read device details\n", j);
         } else {
             fprintf(stderr, "%d: %s, %s, SN: %s %s\n", j, vendor, product, serial,
-                    (j == dev_index) ? "(currently selected)" : "");
+                (j == dev_index) ? "(currently selected)" : "");
         }
     }
 
@@ -330,8 +330,9 @@ int modesInitRTLSDR(void) {
     }
 
     // Set gain, frequency, sample rate, and reset the device
-    rtlsdr_set_tuner_gain_mode(Modes.dev, (Modes.enable_agc) ? 0 : 1);
-    if (!Modes.enable_agc) {
+    rtlsdr_set_tuner_gain_mode(Modes.dev,
+        (Modes.rtl_gain == MODES_AUTO_GAIN) ? 0 : 1);
+    if (Modes.rtl_gain != MODES_AUTO_GAIN) {
         int *gains;
         int numgains;
 
@@ -347,8 +348,8 @@ int modesInitRTLSDR(void) {
             free(gains);
             return -1;
         }
-        
-        if (Modes.rtl_gain == MODES_MAX_RTL_GAIN) {
+
+        if (Modes.rtl_gain == MODES_RTL_MAX_GAIN) {
             int highest = -1;
             int i;
 
@@ -358,7 +359,7 @@ int modesInitRTLSDR(void) {
             }
 
             Modes.rtl_gain = highest;
-            fprintf(stderr, "Max available gain is: %.2f dB\n", Modes.rtl_gain/10.0);
+            fprintf(stderr, "Max available gain is: %.2f dB\n", Modes.rtl_gain / 10.0);
         } else {
             int closest = -1;
             int i;
@@ -370,13 +371,13 @@ int modesInitRTLSDR(void) {
 
             if (closest != Modes.rtl_gain) {
                 Modes.rtl_gain = closest;
-                fprintf(stderr, "Closest available gain: %.2f dB\n", Modes.rtl_gain/10.0);
+                fprintf(stderr, "Closest available gain: %.2f dB\n", Modes.rtl_gain / 10.0);
             }
         }
 
         free(gains);
 
-        fprintf(stderr, "Setting gain to: %.2f dB\n", Modes.rtl_gain/10.0);
+        fprintf(stderr, "Setting gain to: %.2f dB\n", Modes.rtl_gain / 10.0);
         if (rtlsdr_set_tuner_gain(Modes.dev, Modes.rtl_gain) < 0) {
             fprintf(stderr, "Error setting tuner gains\n");
             return -1;
@@ -391,7 +392,7 @@ int modesInitRTLSDR(void) {
 
     rtlsdr_reset_buffer(Modes.dev);
     fprintf(stderr, "Gain reported by device: %.2f dB\n",
-        rtlsdr_get_tuner_gain(Modes.dev)/10.0);
+        rtlsdr_get_tuner_gain(Modes.dev) / 10.0);
 
 #ifdef HAVE_RTL_BIAST
     if (Modes.enable_rtlsdr_biast) {
@@ -948,7 +949,7 @@ void showHelp(void) {
 "--net-only               Enable just networking, no SDR device or file used\n"
 "RTL-SDR specific options:\n"
 "    --device-index <index>   Select SDR device (default: 0)\n"
-"    --rtl-gain <db>          Set gain (default: max gain)\n"
+"    --rtl-gain <db>          Set gain (default: max gain. Use -10 for auto-gain)\n"
 "    --ppm <error>            Set receiver error in parts per million (default 0)\n"
 #ifdef HAVE_RTL_BIAST
 "    --enable-rtlsdr-biast    Set bias tee supply on (default off)\n"
@@ -1460,15 +1461,6 @@ int main(int argc, char **argv) {
         }
     }
 #endif
-
-    if (Modes.prefer_rtlsdr) {
-        if ((Modes.rtl_gain != MODES_MAX_RTL_GAIN) && Modes.enable_agc) {
-            showHelp();
-            fprintf(stderr,
-                "\n\nError: --rtl-gain cannot be used with --enable-agc.\n");
-            exit(1);
-        }
-    }
 
 #ifndef _WIN32
     // Setup for SIGWINCH for handling lines
