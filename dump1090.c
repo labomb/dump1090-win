@@ -515,7 +515,7 @@ int modesInitAirSpy(void) {
     }
     fprintf(stderr, ", AGC: %i\n", Modes.enable_agc);
 
-	Modes.airspy_enabled = 1;
+    Modes.airspy_enabled = 1;
 
     return (0);
 }
@@ -849,7 +849,15 @@ void *readerThreadEntryPoint(void *arg) {
 
                 if (!Modes.exit) {
                     log_with_timestamp("Warning: lost the connection to the RTLSDR device.");
+#ifdef HAVE_RTL_BIAST
+                    if (Modes.enable_rtlsdr_biast) {
+                        rtlsdr_close_bt(Modes.dev);
+                    } else {
+                        rtlsdr_close(Modes.dev);
+                    }
+#else
                     rtlsdr_close(Modes.dev);
+#endif
                     Modes.dev = NULL;
 
                     do {
@@ -883,7 +891,15 @@ void *readerThreadEntryPoint(void *arg) {
         }
 
         if (Modes.dev != NULL) {
+#ifdef HAVE_RTL_BIAST
+            if (Modes.enable_rtlsdr_biast) {
+                rtlsdr_close_bt(Modes.dev);
+            } else {
+                rtlsdr_close(Modes.dev);
+            }
+#else
             rtlsdr_close(Modes.dev);
+#endif
             Modes.dev = NULL;
         }
 #ifdef HAVE_AIRSPY
@@ -1001,7 +1017,7 @@ void showHelp(void) {
 "--aggressive             More CPU for more messages (two bits fixes, ...)\n"
 #endif
 "--mlat                   Display raw messages in Beast ascii mode\n"
-"--stats                  Print statistics at exit. No other output\n"
+"--stats                  Print statistics at exit\n"
 "--stats-range            Collect/show range histogram\n"
 "--stats-every <seconds>  Show and reset stats every <seconds> seconds\n"
 "--onlyaddr               Show only ICAO addresses (testing purposes)\n"
