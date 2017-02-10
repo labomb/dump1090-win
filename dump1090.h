@@ -100,7 +100,7 @@ typedef struct rtlsdr_dev rtlsdr_dev_t;
 #define MODES_RTL_BUF_SIZE         (16*16384)                 // 256k
 #define MODES_RTL_MAG_BUF_SAMPLES  (MODES_RTL_BUF_SIZE / 2)   // Each sample is 2 bytes
 #define MODES_RTL_MAG_BUFFERS      12                         // Number of magnitude buffers (should be smaller than RTL_BUFFERS for flowcontrol to work)
-/* AirSpy defaults */
+/* Airspy defaults */
 #define VGA_GAIN_MAX 15
 #define MIXER_GAIN_MAX 15
 #define LNA_GAIN_MAX 14

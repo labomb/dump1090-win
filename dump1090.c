@@ -409,9 +409,9 @@ int modesInitRTLSDR(void) {
 
 #ifdef HAVE_AIRSPY
 //
-// =============================== AirSpy handling ========================== 
+// =============================== Airspy handling ========================== 
 //
-int modesInitAirSpy(void) {
+int modesInitAirspy(void) {
     #define AIRSPY_STATUS(status, message) \
         if (status != 0) { \
         fprintf(stderr, "%s\n", message); \
@@ -439,7 +439,7 @@ int modesInitAirSpy(void) {
     AIRSPY_STATUS(status, "airspy_init failed.");
 
     status = airspy_open(&Modes.airspy);
-    AIRSPY_STATUS(status, "No AirSpy compatible devices found.");
+    AIRSPY_STATUS(status, "No Airspy compatible devices found.");
 
     status = airspy_get_samplerates(Modes.airspy, &count, 0);
     AIRSPY_STATUS(status, "airspy_get_samplerates failed.");
@@ -496,7 +496,7 @@ int modesInitAirSpy(void) {
         AIRSPY_STATUS(status, "airspy_set_rf_bias (off) failed.");
     }
 
-    fprintf(stderr, "AirSpy successfully initialized\n");
+    fprintf(stderr, "Airspy successfully initialized\n");
     if (Modes.enable_linearity) {
         fprintf(stderr, "Linearity Mode Gain: %i", Modes.linearity_gain);
     }
@@ -884,7 +884,7 @@ void *readerThreadEntryPoint(void *arg) {
                     do {
                         sleep(2);
                         log_with_timestamp("Trying to reconnect to the airspy device..");
-                    } while (!Modes.exit && modesInitAirSpy() < 0);
+                    } while (!Modes.exit && modesInitAirspy() < 0);
                 }
             }
 #endif
@@ -959,7 +959,7 @@ void showHelp(void) {
 "Input to use (you must specify one):"
 "--rtlsdr                 use RTLSDR device\n"
 #ifdef HAVE_AIRSPY
-"--airspy                 use AirSpy device\n"
+"--airspy                 use Airspy device\n"
 #endif
 "--ifile <filename>       Read data from File (use '-' for stdin)\n"
 "--net-only               Enable just networking, no SDR device or file used\n"
@@ -1494,7 +1494,7 @@ int main(int argc, char **argv) {
             exit(1);
         }
 #ifdef HAVE_AIRSPY        
-        else if (Modes.prefer_airspy == 1 && modesInitAirSpy() < 0) {
+        else if (Modes.prefer_airspy == 1 && modesInitAirspy() < 0) {
             exit(1);
         }
 #endif
