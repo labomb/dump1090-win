@@ -63,7 +63,7 @@ ifdef AIRSPY
 CPPFLAGS+= $(CPPFLAGS_AIRSPY)
 CFLAGS_RTL+= $(CFLAGS_AIRSPY)
 LIBS_RTL+= $(LIBS_AIRSPY)
-$(info ${\n}Building with AirSpy support...${\n})
+$(info ${\n}Building with Airspy support...${\n})
 endif
 
 %.o: %.c *.h
