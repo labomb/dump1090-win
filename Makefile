@@ -14,6 +14,11 @@ SHAREDIR=$(PREFIX)/share/$(PROGNAME)
 EXTRACFLAGS=-DHTMLPATH=\"$(SHAREDIR)\"
 endif
 
+define \n
+
+
+endef
+
 CPPFLAGS+=-DMODES_DUMP1090_VERSION=\"$(DUMP1090_VERSION)\"
 CFLAGS+=-O2 -g -Wall -Werror -W
 LIBS+=-lpthread -lm
@@ -54,18 +59,20 @@ DUMP1090_OBJ=dump1090.o anet.o interactive.o mode_ac.o mode_s.o net_io.o crc.o d
 VIEW1090_OBJ=view1090.o anet.o interactive.o mode_ac.o mode_s.o net_io.o crc.o stats.o cpr.o icao_filter.o track.o util.o
 FAUP1090_OBJ=faup1090.o anet.o mode_ac.o mode_s.o net_io.o crc.o stats.o cpr.o icao_filter.o track.o util.o
 
-all: dump1090 view1090
+ifdef AIRSPY
+CPPFLAGS+= $(CPPFLAGS_AIRSPY)
+CFLAGS_RTL+= $(CFLAGS_AIRSPY)
+LIBS_RTL+= $(LIBS_AIRSPY)
+$(info ${\n}Building with AirSpy support...${\n})
+endif
+
+all: dump1090 view1090 faup1090
 
 %.o: %.c *.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(CFLAGS_RTL) $(EXTRACFLAGS) -c $< -o $@
 
 dump1090: $(DUMP1090_OBJ) $(COMPAT)
 	$(CC) -g -o $@ $^ $(LIBS) $(LIBS_RTL) $(LDFLAGS)
-
-dump1090-airspy: CPPFLAGS += $(CPPFLAGS_AIRSPY)
-dump1090-airspy: CFLAGS_RTL += $(CFLAGS_AIRSPY)
-dump1090-airspy: $(DUMP1090_OBJ) $(COMPAT)
-	$(CC) -g -o $@ $^ $(LIBS) $(LIBS_RTL) $(LIBS_AIRSPY) $(LDFLAGS)
 
 view1090: $(VIEW1090_OBJ) $(COMPAT)
 	$(CC) -g -o $@ $^ $(LIBS) $(LDFLAGS)
@@ -74,7 +81,7 @@ faup1090: $(FAUP1090_OBJ) $(COMPAT)
 	$(CC) -g -o $@ $^ $(LIBS) $(LDFLAGS)
 
 clean:
-	rm -f *.o compat/clock_gettime/*.o compat/clock_nanosleep/*.o dump1090 dump1090-airspy view1090 faup1090 cprtests crctests
+	rm -f *.o compat/clock_gettime/*.o compat/clock_nanosleep/*.o dump1090 view1090 faup1090 cprtests crctests
 
 test: cprtests
 	./cprtests

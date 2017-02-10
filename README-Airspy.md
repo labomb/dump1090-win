@@ -13,7 +13,7 @@ To enable support for Airspy devices, you will need the airspy and sox resampler
 
 You will likely need to build and install libairspy from source... it can be found [here](https://github.com/airspy/host).
 
-You may be able to simply do something like the following to get the libsoxr lib and development files:
+You may be able to do something like the following to get the libsoxr lib and development files:
 
 ````
 $ sudo apt-get install libsoxr-dev
@@ -21,18 +21,24 @@ $ sudo apt-get install libsoxr-dev
 
 If that (or the equivalent for your distribution) doesn't work, then you will need to build and install it from the source found [here](https://sourceforge.net/projects/soxr/files/).
 
-Once the airspy and soxr libs are installed, you can simply do this:
+Once the airspy and soxr libs are installed, you can simply do this to build dump1090 with support for both RTL-SDR and AirSpy devices:
 
 ````
-$ make dump1090-airspy
+$ make dump1090 AIRSPY=1
 ````
 
-If using another approach to build this package, be sure to include preprocessor define macro HAVE_AIRSPY.
+Or you can do this to build dump1090, view1090 and faup1090:
+
+````
+$ make all AIRSPY=1
+````
+
+If using another approach to build this package, be sure to include preprocessor define macro HAVE_AIRSPY if you wish to include support for the AirSpy.
 
 For details on usage after building, do this:
 
 ````
-$ dump1090-airspy --help
+$ dump1090 --help
 ````
 
  
