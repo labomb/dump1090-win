@@ -66,10 +66,10 @@ LIBS_RTL+= $(LIBS_AIRSPY)
 $(info ${\n}Building with AirSpy support...${\n})
 endif
 
-all: dump1090 view1090 faup1090
-
 %.o: %.c *.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(CFLAGS_RTL) $(EXTRACFLAGS) -c $< -o $@
+
+all: dump1090 view1090 faup1090
 
 dump1090: $(DUMP1090_OBJ) $(COMPAT)
 	$(CC) -g -o $@ $^ $(LIBS) $(LIBS_RTL) $(LDFLAGS)

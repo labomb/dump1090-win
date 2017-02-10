@@ -24,13 +24,13 @@ If that (or the equivalent for your distribution) doesn't work, then you will ne
 Once the airspy and soxr libs are installed, you can simply do this to build dump1090 with support for both RTL-SDR and AirSpy devices:
 
 ````
-$ make dump1090 AIRSPY=1
+$ make AIRSPY=1 dump1090
 ````
 
 Or you can do this to build dump1090, view1090 and faup1090:
 
 ````
-$ make all AIRSPY=1
+$ make AIRSPY=1
 ````
 
 If using another approach to build this package, be sure to include preprocessor define macro HAVE_AIRSPY if you wish to include support for the AirSpy.
