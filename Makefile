@@ -55,9 +55,10 @@ CFLAGS+= -DMISSING_NANOSLEEP
 COMPAT+= compat/clock_nanosleep/clock_nanosleep.o
 endif
 
-DUMP1090_OBJ=dump1090.o anet.o interactive.o mode_ac.o mode_s.o net_io.o crc.o demod_2400.o stats.o cpr.o icao_filter.o track.o util.o convert.o
-VIEW1090_OBJ=view1090.o anet.o interactive.o mode_ac.o mode_s.o net_io.o crc.o stats.o cpr.o icao_filter.o track.o util.o
-FAUP1090_OBJ=faup1090.o anet.o mode_ac.o mode_s.o net_io.o crc.o stats.o cpr.o icao_filter.o track.o util.o
+ifdef BIAST
+CPPFLAGS+= -DHAVE_BIAST
+$(info ${\n}Building with Bias-t support...${\n})
+endif
 
 ifdef AIRSPY
 CPPFLAGS+= $(CPPFLAGS_AIRSPY)
@@ -65,6 +66,10 @@ CFLAGS_RTL+= $(CFLAGS_AIRSPY)
 LIBS_RTL+= $(LIBS_AIRSPY)
 $(info ${\n}Building with Airspy support...${\n})
 endif
+
+DUMP1090_OBJ=dump1090.o anet.o interactive.o mode_ac.o mode_s.o net_io.o crc.o demod_2400.o stats.o cpr.o icao_filter.o track.o util.o convert.o
+VIEW1090_OBJ=view1090.o anet.o interactive.o mode_ac.o mode_s.o net_io.o crc.o stats.o cpr.o icao_filter.o track.o util.o
+FAUP1090_OBJ=faup1090.o anet.o mode_ac.o mode_s.o net_io.o crc.o stats.o cpr.o icao_filter.o track.o util.o
 
 %.o: %.c *.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(CFLAGS_RTL) $(EXTRACFLAGS) -c $< -o $@
