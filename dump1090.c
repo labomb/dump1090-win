@@ -319,7 +319,7 @@ int modesInitRTLSDR(void) {
             fprintf(stderr, "%d: unable to read device details\n", j);
         } else {
             fprintf(stderr, "%d: %s, %s, SN: %s %s\n", j, vendor, product, serial,
-                (j == dev_index) ? "(currently selected)" : "");
+                    (j == dev_index) ? "(currently selected)" : "");
         }
     }
 
