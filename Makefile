@@ -56,7 +56,7 @@ COMPAT+= compat/clock_nanosleep/clock_nanosleep.o
 endif
 
 ifdef BIAST
-CPPFLAGS+= -DHAVE_BIAST
+CPPFLAGS+= -DHAVE_RTL_BIAST
 $(info ${\n}Building with Bias-t support...${\n})
 endif
 
