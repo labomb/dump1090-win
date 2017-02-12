@@ -15,7 +15,7 @@ EXTRACFLAGS=-DHTMLPATH=\"$(SHAREDIR)\"
 endif
 
 CPPFLAGS+=-DMODES_DUMP1090_VERSION=\"$(DUMP1090_VERSION)\"
-CFLAGS+=-O2 -g -Wall -Werror -W
+CFLAGS+=-O2 -Wall -Werror -W
 LIBS+=-lpthread -lm
 
 CFLAGS_RTL=`pkg-config --cflags librtlsdr libusb-1.0`
@@ -24,6 +24,11 @@ LIBS_RTL=`pkg-config --libs librtlsdr libusb-1.0`
 CPPFLAGS_AIRSPY=-DHAVE_AIRSPY
 CFLAGS_AIRSPY=`pkg-config --cflags libairspy soxr`
 LIBS_AIRSPY=`pkg-config --libs libairspy soxr`
+
+ifdef DEBUG
+CFLAGS+= -g
+LDFLAGS+= -g
+endif
 
 CC=gcc
 
@@ -72,13 +77,13 @@ FAUP1090_OBJ=faup1090.o anet.o mode_ac.o mode_s.o net_io.o crc.o stats.o cpr.o i
 all: dump1090 view1090 faup1090
 
 dump1090: $(DUMP1090_OBJ) $(COMPAT)
-	$(CC) -g -o $@ $^ $(LIBS) $(LIBS_RTL) $(LDFLAGS)
+	$(CC) -o $@ $^ $(LIBS) $(LIBS_RTL) $(LDFLAGS)
 
 view1090: $(VIEW1090_OBJ) $(COMPAT)
-	$(CC) -g -o $@ $^ $(LIBS) $(LDFLAGS)
+	$(CC) -o $@ $^ $(LIBS) $(LDFLAGS)
 
 faup1090: $(FAUP1090_OBJ) $(COMPAT)
-	$(CC) -g -o $@ $^ $(LIBS) $(LDFLAGS)
+	$(CC) -o $@ $^ $(LIBS) $(LDFLAGS)
 
 clean:
 	rm -f *.o compat/clock_gettime/*.o compat/clock_nanosleep/*.o dump1090 view1090 faup1090 cprtests crctests
@@ -87,7 +92,7 @@ test: cprtests
 	./cprtests
 
 cprtests: cpr.o cprtests.o
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(EXTRACFLAGS) -g -o $@ $^ -lm
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(EXTRACFLAGS) -o $@ $^ -lm
 
 crctests: crc.c crc.h
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(EXTRACFLAGS) -g -DCRCDEBUG -o $@ $<
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(EXTRACFLAGS) -DCRCDEBUG -o $@ $<
