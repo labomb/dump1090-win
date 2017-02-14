@@ -313,6 +313,7 @@ struct {                             // Internal state
     int           rtl_enabled;
     char         *dev_name;
     int           rtl_gain;
+    int           enable_agc;
     rtlsdr_dev_t *dev;
     int           ppm_error;
 #ifdef HAVE_RTL_BIAST
@@ -324,14 +325,18 @@ struct {                             // Internal state
     int           enable_linearity;
     int           enable_sensitivity;
     int           enable_airspy_biast;
+    int           enable_lna_agc;
+    int           enable_mixer_agc;
     uint8_t       linearity_gain;
     uint8_t       sensitivity_gain;
     uint8_t       mixer_gain;
     uint8_t       lna_gain;
     uint8_t       vga_gain;
     struct airspy_device *airspy;
+    uint64_t      serial_number;
     soxr_t        resampler;
-    char         *airspy_bytes, *airspy_scratch;
+    char         *airspy_bytes;
+    char         *airspy_scratch;
 #endif
     // FILE specific
     char         *filename;          // Input from file
@@ -341,7 +346,6 @@ struct {                             // Internal state
     // Device configuration
     double        sample_rate;       // actual sample rate in use (in hz)
     int           freq;              // frequency
-    int           enable_agc;        // automatic gain control
 
     // Networking
     char           aneterr[ANET_ERR_LEN];

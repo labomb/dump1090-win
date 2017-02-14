@@ -416,7 +416,6 @@ int modesInitAirspy(void) {
         if (status != 0) { \
         fprintf(stderr, "%s\n", message); \
         airspy_close(Modes.airspy); \
-        airspy_exit(); \
         return -1; \
         } \
 
@@ -431,89 +430,86 @@ int modesInitAirspy(void) {
     Modes.airspy_scratch = calloc(2 * Modes.sdr_buf_size, sizeof(int16_t));
     Modes.airspy_bytes = malloc(2 * Modes.sdr_buf_size);
     if ((Modes.airspy_bytes == NULL) || (Modes.airspy_scratch == NULL)) {
-        fprintf(stderr, "airspy buffer allocation failed.\n");
+        fprintf(stderr, "airspy buffer allocation failed\n");
         return -1;
     }
 
-    status = airspy_init();
-    AIRSPY_STATUS(status, "airspy_init failed.");
+    if (Modes.serial_number) {
+        status = airspy_open_sn(&Modes.airspy, Modes.serial_number);
+        AIRSPY_STATUS(status, "airspy_open_sn failed");
+    } else {
+        status = airspy_open(&Modes.airspy);
+        AIRSPY_STATUS(status, "No Airspy compatible devices found");
+    }
 
-    status = airspy_open(&Modes.airspy);
-    AIRSPY_STATUS(status, "No Airspy compatible devices found.");
+    fprintf(stderr, "Configuring Airspy Device...\n");
 
     status = airspy_get_samplerates(Modes.airspy, &count, 0);
-    AIRSPY_STATUS(status, "airspy_get_samplerates failed.");
+    AIRSPY_STATUS(status, "airspy_get_samplerates failed");
     samplerates = (uint32_t *)malloc(count * sizeof(uint32_t));
     airspy_get_samplerates(Modes.airspy, samplerates, count);
     // set the samplerate to the highest value available
     status = airspy_set_samplerate(Modes.airspy, samplerates[0]);
-    AIRSPY_STATUS(status, "airspy_set_samplerate failed.");
+    AIRSPY_STATUS(status, "airspy_set_samplerate failed");
     // Configure the resampler using the airspy sample rate and the sample rate the demodulator expects
     Modes.resampler = soxr_create(samplerates[0], Modes.sample_rate, 2, &sox_err, &ios, &qts, &rts);
     if (sox_err) {
-        fprintf(stderr, "soxr_create: %s; %s\n", soxr_strerror(sox_err), strerror(errno));
+        fprintf(stderr, "soxr_create error: %s; %s\n", soxr_strerror(sox_err), strerror(errno));
         return -1;
     }
     free(samplerates);
 
-    if (Modes.enable_linearity) {
-        status = airspy_set_linearity_gain(Modes.airspy, Modes.linearity_gain);
-        AIRSPY_STATUS(status, "airspy_set_linearity_gain failed.");
-    }
-    else if (Modes.enable_sensitivity) {
-        status = airspy_set_sensitivity_gain(Modes.airspy, Modes.sensitivity_gain);
-        AIRSPY_STATUS(status, "airspy_set_sensitivity_gain failed.");
-    }
-    else {
-        if (Modes.enable_agc) {
-            status = airspy_set_mixer_agc(Modes.airspy, 1);
-            AIRSPY_STATUS(status, "airspy_set_mixer_agc failed.");
-            status = airspy_set_lna_agc(Modes.airspy, 1);
-            AIRSPY_STATUS(status, "airspy_set_lna_agc failed.");
-        }
-        else {
-            status = airspy_set_mixer_gain(Modes.airspy, Modes.mixer_gain);
-            AIRSPY_STATUS(status, "airspy_set_mixer_gain failed.");
-            status = airspy_set_lna_gain(Modes.airspy, Modes.lna_gain);
-            AIRSPY_STATUS(status, "airspy_set_lna_gain failed.");
-        }
-        status = airspy_set_vga_gain(Modes.airspy, Modes.vga_gain);
-        AIRSPY_STATUS(status, "airspy_set_vga_gain failed.");
-    }
-
     status = airspy_set_sample_type(Modes.airspy, AIRSPY_SAMPLE_INT16_IQ);
-    AIRSPY_STATUS(status, "airspy_set_sample_type failed.");
+    AIRSPY_STATUS(status, "airspy_set_sample_type failed");
 
     status = airspy_set_freq(Modes.airspy, Modes.freq);
-    AIRSPY_STATUS(status, "airspy_set_freq failed.");
+    AIRSPY_STATUS(status, "airspy_set_freq failed");
+
+    if (Modes.enable_linearity) {
+        status = airspy_set_linearity_gain(Modes.airspy, Modes.linearity_gain);
+        AIRSPY_STATUS(status, "airspy_set_linearity_gain failed");
+        fprintf(stderr, "Linearity Mode Gain: %i, ", Modes.linearity_gain);
+    } else if (Modes.enable_sensitivity) {
+        status = airspy_set_sensitivity_gain(Modes.airspy, Modes.sensitivity_gain);
+        AIRSPY_STATUS(status, "airspy_set_sensitivity_gain failed");
+        fprintf(stderr, "Sensitivity Mode Gain: %i, ", Modes.sensitivity_gain);
+    } else {
+        if (Modes.enable_mixer_agc) {
+            status = airspy_set_mixer_agc(Modes.airspy, 1);
+            AIRSPY_STATUS(status, "airspy_set_mixer_agc failed");
+            fprintf(stderr, "MIXER Gain: AGC, ");
+        } else {
+            status = airspy_set_mixer_gain(Modes.airspy, Modes.mixer_gain);
+            AIRSPY_STATUS(status, "airspy_set_mixer_gain failed");
+            fprintf(stderr, "MIXER Gain: %i, ", Modes.mixer_gain);
+        }
+
+        if (Modes.enable_lna_agc) {
+            status = airspy_set_lna_agc(Modes.airspy, 1);
+            AIRSPY_STATUS(status, "airspy_set_lna_agc failed");
+            fprintf(stderr, "LNA Gain: AGC, ");
+        } else {
+            status = airspy_set_lna_gain(Modes.airspy, Modes.lna_gain);
+            AIRSPY_STATUS(status, "airspy_set_lna_gain failed");
+            fprintf(stderr, "LNA Gain: %i, ", Modes.lna_gain);
+        }
+
+        status = airspy_set_vga_gain(Modes.airspy, Modes.vga_gain);
+        AIRSPY_STATUS(status, "airspy_set_vga_gain failed");
+        fprintf(stderr, "VGA Gain: %i, ", Modes.vga_gain);
+    }
 
     if (Modes.enable_airspy_biast) {
         status = airspy_set_rf_bias(Modes.airspy, 1);
-        AIRSPY_STATUS(status, "airspy_set_rf_bias (on) failed.");
-    }
-    else {
+        AIRSPY_STATUS(status, "airspy_set_rf_bias (on) failed");
+        fprintf(stderr, "Bias-t: ON\n");
+    } else {
         status = airspy_set_rf_bias(Modes.airspy, 0);
-        AIRSPY_STATUS(status, "airspy_set_rf_bias (off) failed.");
+        AIRSPY_STATUS(status, "airspy_set_rf_bias (off) failed");
+        fprintf(stderr, "Bias-t: OFF\n");
     }
 
     fprintf(stderr, "Airspy successfully initialized\n");
-    if (Modes.enable_linearity) {
-        fprintf(stderr, "Linearity Mode Gain: %i", Modes.linearity_gain);
-    }
-    else if (Modes.enable_sensitivity) {
-        fprintf(stderr, "Sensitivity Mode Gain: %i", Modes.sensitivity_gain);
-    }
-    else {
-        if (Modes.enable_agc) {
-            fprintf(stderr, "MIXER Gain: AGC, LNA Gain: AGC, VGA Gain: %i",
-                Modes.vga_gain);
-        }
-        else {
-            fprintf(stderr, "MIXER Gain: %i, LNA Gain: %i, VGA Gain: %i",
-                Modes.mixer_gain, Modes.lna_gain, Modes.vga_gain);
-        }
-    }
-    fprintf(stderr, ", AGC: %i\n", Modes.enable_agc);
 
     Modes.airspy_enabled = 1;
 
@@ -878,7 +874,6 @@ void *readerThreadEntryPoint(void *arg) {
                     log_with_timestamp("Warning: lost the connection to the airspy device.");
                     airspy_stop_rx(Modes.airspy);
                     airspy_close(Modes.airspy);
-                    airspy_exit();
                     Modes.airspy = NULL;
 
                     do {
@@ -906,7 +901,6 @@ void *readerThreadEntryPoint(void *arg) {
         else if (Modes.airspy != NULL) {
             airspy_stop_rx(Modes.airspy);
             airspy_close(Modes.airspy);
-            airspy_exit();
             soxr_delete(Modes.resampler);
             Modes.airspy = NULL;
         }
@@ -966,24 +960,27 @@ void showHelp(void) {
 "RTL-SDR specific options:\n"
 "    --device-index <index>   Select SDR device (default: 0)\n"
 "    --rtl-gain <db>          Set gain (default: max gain. Use -10 for auto-gain)\n"
+"    --enable-agc             Enable the Automatic Gain Control (default: off)\n"
 "    --ppm <error>            Set receiver error in parts per million (default 0)\n"
 #ifdef HAVE_RTL_BIAST
 "    --enable-rtlsdr-biast    Set bias tee supply on (default off)\n"
 #endif
 #ifdef HAVE_AIRSPY
 "AIRSPY specific options:\n"
+"    --serial-number <n>      Serial number of Airspy to open\n"
 "    --linearity-gain <n>     Set linearity simplified gain, 0-21\n"
 "    --sensitivity-gain <n>   Set sensitivity simplified gain, 0-21\n"
-"    --mixer-gain <n>         Set Mixer (RF) gain (0-15, default 8)\n"
+"    --mixer-gain <n>         Set MIXER (RF) gain (0-15, default 8)\n"
 "    --vga-gain <n>           Set VGA (baseband) gain (0-15, default 5)\n"
 "    --lna-gain <n>           Set LNA (IF) gain (0-15, default 1)\n"
+"    --enable-lna-agc         Enable LNA AGC\n"
+"    --enable-mixer-agc       Enable MIXER AGC\n"
 "    --enable-airspy-biast    Set bias tee supply on (default off)\n"
 #endif
 "FILE specific options:\n"
 "    --iformat <format>       Sample format for input file: UC8 (default), SC16, or SC16Q11\n"
 "    --throttle               When reading from a file, play back in realtime, not at max speed\n"
 "Common options:\n"
-"--enable-agc             Enable the Automatic Gain Control (default: off)\n"
 "--freq <hz>              Set frequency (default: 1090 Mhz)\n"
 "--interactive            Interactive mode refreshing data on screen (implies --throttle when using --file)\n"
 "--interactive-rows <num> Max number of rows in interactive mode (default: 22)\n"
@@ -1220,11 +1217,39 @@ int verbose_device_search(char *s)
 	fprintf(stderr, "No matching devices found.\n");
 	return -1;
 }
+
+int parse_u64(char* s, uint64_t* const value) {
+    uint_fast8_t base = 10;
+    char* s_end;
+    uint64_t u64_value;
+
+    if (strlen(s) > 2) {
+        if (s[0] == '0') {
+            if ((s[1] == 'x') || (s[1] == 'X')) {
+                base = 16;
+                s += 2;
+            } else if ((s[1] == 'b') || (s[1] == 'B')) {
+                base = 2;
+                s += 2;
+            }
+        }
+    }
+
+    s_end = s;
+    u64_value = strtoull(s, &s_end, base);
+    if ((s != s_end) && (*s_end == 0)) {
+        *value = u64_value;
+        return AIRSPY_SUCCESS;
+    } else {
+        return AIRSPY_ERROR_INVALID_PARAM;
+    }
+}
+
 //
 //=========================================================================
 //
 int main(int argc, char **argv) {
-    int j;
+    int j, result;
 
     // Set sane defaults
     modesInitConfig();
@@ -1243,6 +1268,8 @@ int main(int argc, char **argv) {
             Modes.prefer_rtlsdr = 1;
         } else if (!strcmp(argv[j],"--rtl-gain") && more) {
             Modes.rtl_gain = (int) (atof(argv[++j])*10); // Gain is in tens of DBs
+        } else if (!strcmp(argv[j], "--enable-agc")) {
+            Modes.enable_agc = 1;
         } else if (!strcmp(argv[j], "--ppm") && more) {
             Modes.ppm_error = atoi(argv[++j]);
 #ifdef HAVE_RTL_BIAST
@@ -1252,23 +1279,30 @@ int main(int argc, char **argv) {
 #ifdef HAVE_AIRSPY
         } else if (!strcmp(argv[j], "--airspy")) {
             Modes.prefer_airspy = 1;
+        } else if (!strcmp(argv[j], "--serial-number") && more) {
+            result = parse_u64(argv[++j], &Modes.serial_number);
+            if (result != AIRSPY_SUCCESS) {
+                exit(1);
+            }
         } else if (!strcmp(argv[j], "--enable-airspy-biast")) {
             Modes.enable_airspy_biast = 1;
-        } else if (!strcmp(argv[j], "--linearity-gain")) {
+        } else if (!strcmp(argv[j], "--linearity-gain") && more) {
             Modes.linearity_gain = atoi(argv[++j]);
             Modes.enable_linearity = 1;
-        } else if (!strcmp(argv[j], "--sensitivity-gain")) {
+        } else if (!strcmp(argv[j], "--sensitivity-gain") && more) {
             Modes.sensitivity_gain = atoi(argv[++j]);
             Modes.enable_sensitivity = 1;
-        } else if (!strcmp(argv[j], "--mixer-gain")) {
+        } else if (!strcmp(argv[j], "--mixer-gain") && more) {
             Modes.mixer_gain = atoi(argv[++j]);
-        } else if (!strcmp(argv[j], "--lna-gain")) {
+        } else if (!strcmp(argv[j], "--lna-gain") && more) {
             Modes.lna_gain = atoi(argv[++j]);
-        } else if (!strcmp(argv[j], "--vga-gain")) {
+        } else if (!strcmp(argv[j], "--vga-gain") && more) {
             Modes.vga_gain = atoi(argv[++j]);
+        } else if (!strcmp(argv[j], "--enable-lna-agc")) {
+            Modes.enable_lna_agc = atoi(argv[++j]);
+        } else if (!strcmp(argv[j], "--enable-mixer-agc")) {
+            Modes.enable_mixer_agc = atoi(argv[++j]);
 #endif
-        } else if (!strcmp(argv[j], "--enable-agc")) {
-            Modes.enable_agc = 1;
         } else if (!strcmp(argv[j],"--freq") && more) {
             Modes.freq = (int) strtoll(argv[++j],NULL,10);
         } else if (!strcmp(argv[j],"--ifile") && more) {
@@ -1469,10 +1503,10 @@ int main(int argc, char **argv) {
             exit(1);
         }
 
-        if (((Modes.enable_linearity + Modes.enable_sensitivity) > 0) && Modes.enable_agc) {
+        if (((Modes.enable_linearity + Modes.enable_sensitivity) > 0) && ((Modes.enable_lna_agc + Modes.enable_mixer_agc) > 0)) {
             showHelp();
             fprintf(stderr,
-                "\n\nError: --linearity-gain and --sensitivity-gain cannot be used with --enable-agc.\n");
+                "\n\nError: --linearity-gain/--sensitivity-gain cannot be used with --lna-agc/--mixer-agc.\n");
             exit(1);
         }
     }
