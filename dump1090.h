@@ -86,6 +86,12 @@
 
 #include "compat/compat.h"
 
+#ifndef bool
+typedef int bool;
+#define true 1
+#define false 0
+#endif
+
 // Avoid a dependency on rtl-sdr except where it's really needed.
 typedef struct rtlsdr_dev rtlsdr_dev_t;
 
@@ -107,7 +113,7 @@ typedef struct rtlsdr_dev rtlsdr_dev_t;
 #define LINEARITY_GAIN_MAX 21
 #define SENSITIVITY_GAIN_MAX 21
 #define AIRSPY_MIXER_GAIN 8
-#define AIRSPY_LNA_GAIN 1
+#define AIRSPY_LNA_GAIN 13
 #define AIRSPY_VGA_GAIN 5
 #define MODES_ASPY_BUF_SIZE        (4*16384)                  // 64k
 #define MODES_ASPY_MAG_BUF_SAMPLES (MODES_ASPY_BUF_SIZE / 2)  // Each sample is 2 bytes
@@ -322,11 +328,11 @@ struct {                             // Internal state
 #ifdef HAVE_AIRSPY
     // AIRSPY specific
     int           airspy_enabled;
-    int           enable_linearity;
-    int           enable_sensitivity;
-    int           enable_airspy_biast;
-    int           enable_lna_agc;
-    int           enable_mixer_agc;
+    bool           enable_linearity;
+    bool           enable_sensitivity;
+    bool           enable_airspy_biast;
+    bool           enable_lna_agc;
+    bool           enable_mixer_agc;
     uint8_t       linearity_gain;
     uint8_t       sensitivity_gain;
     uint8_t       mixer_gain;
