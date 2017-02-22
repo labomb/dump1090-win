@@ -415,8 +415,7 @@ int modesInitAirspy(void) {
     #define AIRSPY_STATUS(status, message) \
         if (status != 0) { \
         fprintf(stderr, "%s\n", message); \
-        airspy_close(Modes.airspy); \
-        return -1; \
+        goto errClose; \
         } \
 
     int status;
@@ -513,7 +512,26 @@ int modesInitAirspy(void) {
 
     Modes.airspy_enabled = 1;
 
-    return (0);
+    return 0;
+
+errClose:
+    if (Modes.airspy) {
+        if (airspy_is_streaming(Modes.airspy) == AIRSPY_TRUE)
+            airspy_stop_rx(Modes.airspy);
+        airspy_close(Modes.airspy);
+        Modes.airspy = NULL;
+    }
+
+    if (Modes.airspy_scratch)
+        free(Modes.airspy_scratch);
+
+    if (Modes.airspy_bytes)
+        free(Modes.airspy_bytes);
+
+    if (Modes.resampler)
+        soxr_delete(Modes.resampler);
+
+    return -1;
 }
 #endif
 
@@ -642,11 +660,13 @@ int airspyCallback(airspy_transfer *transfer) {
     unsigned block_duration;
     static int dropping = 0;
 
-    // Lock the data buffer variables before accessing them
-    pthread_mutex_lock(&Modes.data_mutex);
     if (Modes.exit) {
         airspy_stop_rx(Modes.airspy);  // ask our caller to stop
+        return (0);
     }
+
+    // Lock the data buffer variables before accessing them
+    pthread_mutex_lock(&Modes.data_mutex);
 
     next_free_buffer = (Modes.first_free_buffer + 1) % Modes.mag_buf_num;
     outbuf = &Modes.mag_buffers[Modes.first_free_buffer];
@@ -662,7 +682,7 @@ int airspyCallback(airspy_transfer *transfer) {
     if (o_done & 1)
         o_done -= 1;
 
-    slen = o_done / 2;
+    slen = o_done;
 
     if (free_bufs == 0 || (dropping && free_bufs < (unsigned)Modes.mag_buf_num / 2)) {
         // FIFO is full. Drop this block.
@@ -871,14 +891,14 @@ void *readerThreadEntryPoint(void *arg) {
                 }
 
                 if (!Modes.exit) {
-                    log_with_timestamp("Warning: lost the connection to the airspy device.");
+                    log_with_timestamp("Warning: lost the connection to the Airspy device.");
                     airspy_stop_rx(Modes.airspy);
                     airspy_close(Modes.airspy);
                     Modes.airspy = NULL;
 
                     do {
                         sleep(2);
-                        log_with_timestamp("Trying to reconnect to the airspy device..");
+                        log_with_timestamp("Trying to reconnect to the Airspy device..");
                     } while (!Modes.exit && modesInitAirspy() < 0);
                 }
             }
@@ -899,7 +919,8 @@ void *readerThreadEntryPoint(void *arg) {
         }
 #ifdef HAVE_AIRSPY
         else if (Modes.airspy != NULL) {
-            airspy_stop_rx(Modes.airspy);
+            if (airspy_is_streaming(Modes.airspy) == AIRSPY_TRUE)
+                airspy_stop_rx(Modes.airspy);
             airspy_close(Modes.airspy);
             soxr_delete(Modes.resampler);
             Modes.airspy = NULL;
@@ -967,12 +988,12 @@ void showHelp(void) {
 #endif
 #ifdef HAVE_AIRSPY
 "AIRSPY specific options:\n"
-"    --serial-number <n>      Serial number of Airspy to open (optional)\n"
+"    --serial-number <0x...>  Serial number (in hex) of Airspy to open (optional)\n"
 "    --linearity-gain <n>     Set linearity simplified gain, 0-21\n"
 "    --sensitivity-gain <n>   Set sensitivity simplified gain, 0-21\n"
 "    --mixer-gain <n>         Set MIXER gain (0-15, default 8)\n"
 "    --vga-gain <n>           Set VGA gain (0-15, default 5)\n"
-"    --lna-gain <n>           Set LNA gain (0-15, default 1)\n"
+"    --lna-gain <n>           Set LNA gain (0-14, default 13)\n"
 "    --enable-lna-agc         Enable LNA AGC (default off)\n"
 "    --enable-mixer-agc       Enable MIXER AGC (default off)\n"
 "    --enable-airspy-biast    Set bias tee supply on (default off)\n"
@@ -1219,29 +1240,16 @@ int verbose_device_search(char *s)
 }
 
 int parse_u64(char* s, uint64_t* const value) {
-    uint_fast8_t base = 10;
     char* s_end;
     uint64_t u64_value;
 
-    if (strlen(s) > 2) {
-        if (s[0] == '0') {
-            if ((s[1] == 'x') || (s[1] == 'X')) {
-                base = 16;
-                s += 2;
-            } else if ((s[1] == 'b') || (s[1] == 'B')) {
-                base = 2;
-                s += 2;
-            }
-        }
-    }
-
     s_end = s;
-    u64_value = strtoull(s, &s_end, base);
+    u64_value = strtoull(s, &s_end, 0);
     if ((s != s_end) && (*s_end == 0)) {
         *value = u64_value;
-        return AIRSPY_SUCCESS;
+        return true;
     } else {
-        return AIRSPY_ERROR_INVALID_PARAM;
+        return false;
     }
 }
 
@@ -1249,7 +1257,7 @@ int parse_u64(char* s, uint64_t* const value) {
 //=========================================================================
 //
 int main(int argc, char **argv) {
-    int j, result;
+    int j;
 
     // Set sane defaults
     modesInitConfig();
@@ -1280,18 +1288,16 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[j], "--airspy")) {
             Modes.prefer_airspy = 1;
         } else if (!strcmp(argv[j], "--serial-number") && more) {
-            result = parse_u64(argv[++j], &Modes.serial_number);
-            if (result != AIRSPY_SUCCESS) {
+            if (!parse_u64(argv[++j], &Modes.serial_number))
                 exit(1);
-            }
         } else if (!strcmp(argv[j], "--enable-airspy-biast")) {
-            Modes.enable_airspy_biast = 1;
+            Modes.enable_airspy_biast = true;
         } else if (!strcmp(argv[j], "--linearity-gain") && more) {
             Modes.linearity_gain = atoi(argv[++j]);
-            Modes.enable_linearity = 1;
+            Modes.enable_linearity = true;
         } else if (!strcmp(argv[j], "--sensitivity-gain") && more) {
             Modes.sensitivity_gain = atoi(argv[++j]);
-            Modes.enable_sensitivity = 1;
+            Modes.enable_sensitivity = true;
         } else if (!strcmp(argv[j], "--mixer-gain") && more) {
             Modes.mixer_gain = atoi(argv[++j]);
         } else if (!strcmp(argv[j], "--lna-gain") && more) {
@@ -1299,9 +1305,9 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[j], "--vga-gain") && more) {
             Modes.vga_gain = atoi(argv[++j]);
         } else if (!strcmp(argv[j], "--enable-lna-agc")) {
-            Modes.enable_lna_agc = atoi(argv[++j]);
+            Modes.enable_lna_agc = true;
         } else if (!strcmp(argv[j], "--enable-mixer-agc")) {
-            Modes.enable_mixer_agc = atoi(argv[++j]);
+            Modes.enable_mixer_agc = true;
 #endif
         } else if (!strcmp(argv[j],"--freq") && more) {
             Modes.freq = (int) strtoll(argv[++j],NULL,10);
@@ -1435,7 +1441,7 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[j],"--stats-range")) {
             Modes.stats_range_histo = 1;
         } else if (!strcmp(argv[j],"--stats-every") && more) {
-            Modes.stats = (uint64_t) (1000 * atof(argv[++j]));
+            Modes.stats = (uint64_t)(1000 * atof(argv[++j]));
         } else if (!strcmp(argv[j],"--snip") && more) {
             snipMode(atoi(argv[++j]));
             exit(0);
@@ -1445,7 +1451,7 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[j],"--quiet")) {
             Modes.quiet = 1;
         } else if (!strcmp(argv[j],"--show-only") && more) {
-            Modes.show_only = (uint32_t) strtoul(argv[++j], NULL, 16);
+            Modes.show_only = (uint32_t)strtoul(argv[++j], NULL, 16);
         } else if (!strcmp(argv[j],"--mlat")) {
             Modes.mlat = 1;
         } else if (!strcmp(argv[j],"--interactive-rtl1090")) {
@@ -1465,7 +1471,7 @@ int main(int argc, char **argv) {
             Modes.json_location_accuracy = atoi(argv[++j]);
         } else {
             fprintf(stderr,
-                "Unknown or not enough arguments for option '%s'.\n\n",
+                "\nUnknown or not enough arguments for option '%s'.\n\n",
                 argv[j]);
             showHelp();
             exit(1);
@@ -1473,40 +1479,70 @@ int main(int argc, char **argv) {
     }
 
     if ((Modes.prefer_airspy + Modes.prefer_rtlsdr + Modes.prefer_file + Modes.net_only) == 0) {
-        showHelp();
         fprintf(stderr,
-            "\n\nError: you must specify either "
+            "\nError: you must specify either "
 #ifdef HAVE_AIRSPY
             "--airspy, "
 #endif
-            "--rtlsdr, --ifile, or --net-only.\n");
+            "--rtlsdr, --ifile, or --net-only.\n\n");
+        showHelp();
         exit(1);
     }
 
     if ((Modes.prefer_airspy + Modes.prefer_rtlsdr + Modes.prefer_file + Modes.net_only) > 1) {
-        showHelp();
         fprintf(stderr,
-            "\n\nError: only one of "
+            "\nError: only one of "
 #ifdef HAVE_AIRSPY
             "--airspy, "
 #endif
-            "--rtlsdr, --ifile, and --net-only may be specified.\n");
+            "--rtlsdr, --ifile, and --net-only may be specified.\n\n");
+        showHelp();
         exit(1);
     }
 
 #ifdef HAVE_AIRSPY
     if (Modes.prefer_airspy) {
-        if ((Modes.enable_linearity + Modes.enable_sensitivity) > 1) {
-            showHelp();
+        if (Modes.enable_linearity && Modes.enable_sensitivity) {
             fprintf(stderr,
-                "\n\nError: --linearity-gain and --sensitivity-gain are mutually exclusive.\n");
+                "\nError: --linearity-gain and --sensitivity-gain cannot be used together.\n\n");
+            showHelp();
             exit(1);
         }
 
-        if (((Modes.enable_linearity + Modes.enable_sensitivity) > 0) && ((Modes.enable_lna_agc + Modes.enable_mixer_agc) > 0)) {
-            showHelp();
+        if ((Modes.enable_linearity || Modes.enable_sensitivity) && (Modes.enable_lna_agc || Modes.enable_mixer_agc)) {
             fprintf(stderr,
-                "\n\nError: --linearity-gain/--sensitivity-gain cannot be used with --enable-lna-agc/--enable-mixer-agc.\n");
+                "\nError: --linearity-gain/--sensitivity-gain cannot be used with --enable-lna-agc/--enable-mixer-agc.\n\n");
+            showHelp();
+            exit(1);
+        }
+
+        if (Modes.vga_gain > VGA_GAIN_MAX) {
+            fprintf(stderr, "\nError: --vga_gain out of range.\n\n");
+            showHelp();
+            exit(1);
+        }
+
+        if (Modes.mixer_gain > MIXER_GAIN_MAX) {
+            fprintf(stderr, "\nError: --mixer_gain out of range.\n\n");
+            showHelp();
+            exit(1);
+        }
+
+        if (Modes.lna_gain > LNA_GAIN_MAX) {
+            fprintf(stderr, "\nError: --lna_gain out of range.\n\n");
+            showHelp();
+            exit(1);
+        }
+
+        if (Modes.linearity_gain > LINEARITY_GAIN_MAX) {
+            fprintf(stderr, "\nError: --linearity_gain out of range.\n\n");
+            showHelp();
+            exit(1);
+        }
+
+        if (Modes.sensitivity_gain > SENSITIVITY_GAIN_MAX) {
+            fprintf(stderr, "\nError: --sensitivity_gain out of range.\n\n");
+            showHelp();
             exit(1);
         }
     }
