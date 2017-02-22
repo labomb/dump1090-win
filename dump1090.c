@@ -590,7 +590,6 @@ void rtlsdrCallback(unsigned char *buf, uint32_t len, void *ctx) {
 
     if (was_odd) {
         // Drop a sample so we are in sync with I/Q samples again (hopefully)
-        fprintf(stderr, "was_odd = %d\n", was_odd);
         ++buf;
         --len;
         ++outbuf->dropped;
