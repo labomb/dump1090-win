@@ -971,7 +971,7 @@ void showHelp(void) {
 "-----------------------------------------------------------------------------\n"
 "| dump1090 ModeS Receiver     %45s |\n"
 "-----------------------------------------------------------------------------\n"
-"Input to use (you must specify one):"
+"Input to use (you must specify one):\n"
 "--rtlsdr                 use RTLSDR device\n"
 #ifdef HAVE_AIRSPY
 "--airspy                 use Airspy device\n"
